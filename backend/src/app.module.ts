@@ -6,9 +6,10 @@ import { AuthModule } from './common/auth/auth.module';
 import { AuditModule } from './audit/audit.module';
 import { FacilityModule } from './facility/facility.module';
 import { IdentityModule } from './identity/identity.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
-  imports: [SupabaseModule, AuthModule, AuditModule, FacilityModule, IdentityModule],
+  imports: [SupabaseModule, AuthModule, AuditModule, FacilityModule, IdentityModule, UsersModule],
   controllers: [AppController],
   providers: [AppService],
 })
