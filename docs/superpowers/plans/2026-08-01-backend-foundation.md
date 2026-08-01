@@ -36,7 +36,16 @@ Jest + Supertest, Supabase CLI for local Postgres + migrations.
 - Every table has `created_at timestamptz default now()`; tables holding business data (not
   `audit_event`) also get `updated_at timestamptz default now()`.
 - Local dev/test requires the Supabase CLI (`supabase start`) running before any test that
-  touches the database.
+  touches the database. Tests always run against the local instance, never the cloud
+  project below — never point `SUPABASE_URL` at production data in a test run.
+- **Cloud project:** this repo's Supabase project is hosted at
+  `https://supabase.com/dashboard/project/wjgyivxvmqchlhgmxcxe`. It is not used for local
+  dev/testing (see above) — it's where migrations get pushed for staging/production. Link
+  it once with `npx supabase link --project-ref wjgyivxvmqchlhgmxcxe`, then apply migrations
+  there with `npx supabase db push` (as a deliberate, reviewed step — never run this as part
+  of an automated test/build step). Populate `backend/.env` (local dev) from `supabase
+  start`'s printed local values; populate the real deployment environment's env vars from
+  this cloud project's API settings page, not from local dev values.
 
 ---
 
