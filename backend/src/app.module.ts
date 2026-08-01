@@ -11,6 +11,7 @@ import { UsersModule } from './users/users.module';
 import { TasksModule } from './tasks/tasks.module';
 import { EpisodeModule } from './episode/episode.module';
 import { RiskModule } from './risk/risk.module';
+import { ReferralModule } from './referral/referral.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RiskModule } from './risk/risk.module';
     TasksModule,
     EpisodeModule,
     RiskModule,
+    ReferralModule,
   ],
   controllers: [AppController],
   providers: [AppService],
