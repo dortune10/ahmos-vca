@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { SupabaseModule } from './common/supabase/supabase.module';
@@ -9,7 +10,15 @@ import { IdentityModule } from './identity/identity.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
-  imports: [SupabaseModule, AuthModule, AuditModule, FacilityModule, IdentityModule, UsersModule],
+  imports: [
+    EventEmitterModule.forRoot(),
+    SupabaseModule,
+    AuthModule,
+    AuditModule,
+    FacilityModule,
+    IdentityModule,
+    UsersModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
