@@ -13,7 +13,7 @@ requesting user's JWT so Postgres Row-Level Security is the actual enforcement m
 (see `docs/DECISIONS.md` #21), not re-implemented authorization logic in application code.
 
 **Tech Stack:** Node.js 20 LTS, NestJS 10.x, TypeScript 5.x, `@supabase/supabase-js` v2,
-Jest + Supertest, Supabase CLI for local Postgres + migrations.
+Jest + Supertest, Supabase CLI for linking/migrations against the hosted project.
 
 ## Global Constraints
 
@@ -31,21 +31,29 @@ Jest + Supertest, Supabase CLI for local Postgres + migrations.
   authorization mechanism — do not add manual `tenant_id`/`facility_id` filtering in
   application code as a substitute for RLS (it should be redundant-safe, but RLS is the
   source of truth).
-- Migrations are plain SQL files in `supabase/migrations/`, applied via `supabase db reset`
-  (local) — never hand-edit the database outside a migration file.
+- Migrations are plain SQL files in `supabase/migrations/`, applied via `supabase db push`
+  against the linked project (see "Database" below) — never hand-edit the database outside
+  a migration file.
 - Every table has `created_at timestamptz default now()`; tables holding business data (not
   `audit_event`) also get `updated_at timestamptz default now()`.
-- Local dev/test requires the Supabase CLI (`supabase start`) running before any test that
-  touches the database. Tests always run against the local instance, never the cloud
-  project below — never point `SUPABASE_URL` at production data in a test run.
-- **Cloud project:** this repo's Supabase project is hosted at
-  `https://supabase.com/dashboard/project/wjgyivxvmqchlhgmxcxe`. It is not used for local
-  dev/testing (see above) — it's where migrations get pushed for staging/production. Link
-  it once with `npx supabase link --project-ref wjgyivxvmqchlhgmxcxe`, then apply migrations
-  there with `npx supabase db push` (as a deliberate, reviewed step — never run this as part
-  of an automated test/build step). Populate `backend/.env` (local dev) from `supabase
-  start`'s printed local values; populate the real deployment environment's env vars from
-  this cloud project's API settings page, not from local dev values.
+- **Database: one hosted project, no local Docker, no paid branch.** This project (`amhos`,
+  `wjgyivxvmqchlhgmxcxe`, `https://wjgyivxvmqchlhgmxcxe.supabase.co`) is used directly for
+  both development and testing — chosen because Docker isn't available in this environment
+  (ruling out the CLI's normal local-stack workflow) and a Supabase branch costs money
+  (~$0.01344/hour) that isn't justified while staying on the free tier. This is safe *right
+  now* because the project is brand new (created 2026-08-01, zero tables, zero real users)
+  — there is no production data to damage. **This must change before any real patient/staff
+  data exists in this project**: at that point, tests need to move to an isolated branch or
+  separate project rather than running against the same database as real users. Treat that
+  as a hard prerequisite for going live, not optional cleanup.
+  - Link once: `npx supabase link --project-ref wjgyivxvmqchlhgmxcxe`.
+  - Apply migrations: `npx supabase db push` (this is the "run the migration" step
+    throughout this plan — replaces what would otherwise be a local `supabase db reset`).
+  - `backend/.env` values come from this project's dashboard (Settings → API): project URL,
+    anon/publishable key, and the service_role key (service_role key is never exposed via
+    any MCP/API integration — copy it from the dashboard directly, by hand, and never commit
+    it). The JWT secret used to mint test tokens (`SUPABASE_JWT_SECRET`, used in Task 4's RLS
+    test) is under Settings → API → JWT Settings on the same dashboard.
 
 ---
 
@@ -170,10 +178,10 @@ git commit -m "feat: scaffold NestJS backend with health check endpoint"
 
 ---
 
-### Task 2: Supabase local dev environment + connection service
+### Task 2: Supabase connection service (linked to the `amhos` hosted project)
 
 **Files:**
-- Create: `supabase/config.toml` (via Supabase CLI init)
+- Create: `supabase/config.toml` (via Supabase CLI init, then linked — not a local stack)
 - Create: `backend/src/common/supabase/supabase.module.ts`
 - Create: `backend/src/common/supabase/supabase.service.ts`
 - Test: `backend/src/common/supabase/supabase.service.spec.ts`
@@ -188,17 +196,26 @@ git commit -m "feat: scaffold NestJS backend with health check endpoint"
   - `getServiceClient(): SupabaseClient` — service-role client that bypasses RLS, for
     system-triggered writes only (used later by `audit` and `risk` modules).
 
-- [ ] **Step 1: Initialize the Supabase project**
+- [ ] **Step 1: Initialize and link the Supabase project**
 
 Run:
 ```bash
 cd /Users/dot/Documents/Projects/VCA-Health
 npx supabase init
-npx supabase start
+npx supabase link --project-ref wjgyivxvmqchlhgmxcxe
 ```
 
-This prints local API URL, anon key, and service_role key — copy them into a new
-`backend/.env` (not committed, matches `.env.example`'s keys).
+`link` will prompt for the project's database password (from the dashboard, Settings →
+Database) — this is a one-time local credential, not something to hardcode anywhere. This
+project is used directly for dev/test (see Global Constraints above) — there is no
+`supabase start`/local Docker stack in this plan.
+
+Create `backend/.env` (not committed, matches `.env.example`'s keys) populated from the
+`amhos` project's dashboard (Settings → API): project URL
+(`https://wjgyivxvmqchlhgmxcxe.supabase.co`), the anon/publishable key, and the
+service_role key (copy this one by hand from the dashboard — it is never available via any
+CLI/MCP command). Also note `SUPABASE_JWT_SECRET` from Settings → API → JWT Settings — not
+needed until Task 4's RLS test, but convenient to grab now while you're on that page.
 
 - [ ] **Step 2: Install the Supabase client**
 
@@ -299,7 +316,7 @@ Edit `backend/src/app.module.ts` to import `SupabaseModule` (from
 ```bash
 cd /Users/dot/Documents/Projects/VCA-Health
 git add backend/ supabase/
-git commit -m "feat: add Supabase local dev setup and connection service"
+git commit -m "feat: link Supabase project and add connection service"
 ```
 
 ---
@@ -367,8 +384,8 @@ alter table app_user enable row level security;
 
 - [ ] **Step 2: Apply the migration**
 
-Run: `npx supabase db reset`
-Expected: migration applies cleanly, no errors printed.
+Run: `npx supabase db push`
+Expected: migration applies cleanly to the linked `amhos` project, no errors printed.
 
 - [ ] **Step 3: Write the failing verification test**
 
@@ -449,9 +466,13 @@ git commit -m "feat: add core schema migration for facility, person, app_user"
 
 **Interfaces:**
 - Consumes: `facility`, `person`, `app_user` tables from Task 3.
-- Produces: RLS policies enforcing tenant isolation on all three tables, and facility
-  scoping on `person` for non-supervisor/admin roles. Later modules rely on these policies
-  already being in place — no module-level authorization code duplicates this.
+- Produces: RLS policies enforcing tenant isolation on all three tables (select on all
+  three; insert/update on `facility` restricted to the `admin` role, matching
+  `FacilityController`'s route-level restriction — without these, Task 8's
+  `FacilityService.create()` and any later admin-dashboard facility-update endpoint would
+  pass their own mocked-client unit tests while silently failing against real RLS). Later
+  modules rely on these policies already being in place — no module-level authorization
+  code duplicates this.
 
 - [ ] **Step 1: Write the failing RLS test**
 
@@ -463,7 +484,7 @@ import * as jwt from 'jsonwebtoken';
 const SUPABASE_URL = process.env.SUPABASE_URL as string;
 const ANON_KEY = process.env.SUPABASE_ANON_KEY as string;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
-const JWT_SECRET = process.env.SUPABASE_JWT_SECRET as string; // printed by `supabase start`
+const JWT_SECRET = process.env.SUPABASE_JWT_SECRET as string; // from dashboard: Settings → API → JWT Settings
 
 function tokenFor(userId: string, role: string) {
   return jwt.sign(
@@ -542,6 +563,23 @@ $$;
 create policy "facility_tenant_isolation" on facility
   for select using (tenant_id = (select tenant_id from auth_app_user()));
 
+-- Facility create/update are admin-only actions (FacilityController restricts both routes
+-- to the 'admin' role) — without these, FacilityService.create() and the admin dashboard's
+-- facility-update endpoint would silently fail against real RLS despite passing their own
+-- mocked-client unit tests. Found and would otherwise have been patched later, piecemeal,
+-- by whichever plan needed facility writes first; fixed here at the source instead.
+create policy "facility_insert_admin_only" on facility
+  for insert with check (
+    (select role from auth_app_user()) = 'admin'
+    and tenant_id = (select tenant_id from auth_app_user())
+  );
+
+create policy "facility_update_admin_only" on facility
+  for update using (
+    (select role from auth_app_user()) = 'admin'
+    and tenant_id = (select tenant_id from auth_app_user())
+  );
+
 create policy "person_tenant_isolation" on person
   for select using (tenant_id = (select tenant_id from auth_app_user()));
 
@@ -560,7 +598,7 @@ create policy "app_user_self_and_tenant_admins" on app_user
 
 Run:
 ```bash
-npx supabase db reset
+npx supabase db push
 cd backend && npm run test:e2e -- rls.e2e-spec.ts
 ```
 Expected: PASS — revert the temporary Step 2 assertion back to the original
@@ -950,7 +988,7 @@ create policy "audit_event_tenant_read" on audit_event
 
 - [ ] **Step 2: Apply the migration**
 
-Run: `npx supabase db reset`
+Run: `npx supabase db push`
 
 - [ ] **Step 3: Write the failing test**
 

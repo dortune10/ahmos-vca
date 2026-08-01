@@ -216,11 +216,34 @@ gap in the reviewed spec, not a new scope decision, so it's being filled in dire
 than re-litigated as a choice; flagging here per the standing "log all decisions" rule
 since it does change the data model after spec approval.
 
+### 23. Database for dev/test: the hosted `amhos` project directly, no local Docker, no branch
+**Decision:** Plan 1 (and all later plans) develop and test directly against the hosted
+Supabase project `amhos` (`wjgyivxvmqchlhgmxcxe`,
+`https://wjgyivxvmqchlhgmxcxe.supabase.co`) rather than a local Docker-based Supabase stack
+or a paid preview branch.
+**Alternatives considered:** Install Docker Desktop and use the Supabase CLI's normal local
+stack (`supabase start`) — this is what Plan 1 originally assumed, before finding Docker
+isn't installed in this environment. A paid Supabase branch (~$0.01344/hour, confirmed via
+`get_cost`) — user initially chose this over installing Docker, then reversed once the cost
+was shown, preferring to stay on the free tier.
+**Why:** No Docker available; branch costs money the user doesn't want to spend right now.
+Safe for the moment because this project is brand new (created 2026-08-01, confirmed zero
+tables/zero migrations before this build starts) — there is no real user/patient data at
+risk. **This is explicitly a temporary arrangement**: before any real patient or staff data
+exists in this project, testing must move to an isolated branch or separate project so
+tests don't run against live data. Also note: getting Supabase MCP access to this project
+took two reauthorization attempts — the first left the MCP connection pointed at an
+unrelated Supabase account/org (`mglsxoaifrgcbtbrwzew`, four other unrelated projects); the
+second attempt connected correctly.
+
 ---
 
 ## Still Open
 
 - Relationship between this VCA-Health build and the original AMHOS repo (decision #1).
+- **Action item, not just a question:** move dev/test off the shared `amhos` project onto
+  an isolated branch or separate project before any real patient/staff data exists there
+  (decision #23) — must happen before go-live, not "someday."
 - Whether the WhatsApp-assistant descope (decision #16) is permanent or just a build-order
   choice — not yet confirmed.
 - Actual clinical rule thresholds for the risk rules engine (decision #19) — needs clinical
