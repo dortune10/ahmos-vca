@@ -89,6 +89,22 @@ transcription error.
   `'Hello World!'`) to test the real `GET /api/v1/health` endpoint instead, since Task 1's
   changes made the original generated test permanently fail.
 
+## Addendum: Real Startup Bug Found When Actually Running the App
+
+`npm test` and `npm run test:e2e` passing does not mean the app actually starts. When first
+running `npm run start:dev` (to preview the app in a browser, after this report was
+originally written), TypeScript failed to compile with 5 errors: `CurrentUserPayload` (a
+type) was imported as a regular value import
+(`import { CurrentUserPayload } from '../common/auth/auth.guard'`) in three controllers
+(`facility.controller.ts`, `identity.controller.ts`, `users.controller.ts`), but used only
+in decorated method signatures — which NestJS's stricter build-time TypeScript settings
+(`isolatedModules` + `emitDecoratorMetadata`) reject (`TS1272`). Jest's transform apparently
+doesn't enforce this the same way `nest start`/`nest build` does, so every test suite stayed
+green while the app itself couldn't boot. Fixed by changing all three imports to
+`import type { CurrentUserPayload } from '../common/auth/auth.guard'`. **Lesson for future
+plans' "final verification" step: also run the actual start/build command, not just the
+test suite** — a passing test suite is necessary but not sufficient proof the app runs.
+
 ## Follow-up Impact on Other Plans
 
 The `private.auth_app_user()` rename rippled outward: every plan that writes its own RLS

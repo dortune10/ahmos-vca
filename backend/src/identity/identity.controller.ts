@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '../common/auth/auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
-import { CurrentUserPayload } from '../common/auth/auth.guard';
+import type { CurrentUserPayload } from '../common/auth/auth.guard';
 import { IdentityService, DuplicatePersonError } from './identity.service';
 import { CreatePersonDto } from './dto/create-person.dto';
 
