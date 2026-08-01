@@ -45,7 +45,11 @@ fixed along the way. See [`CHANGELOG.md`](CHANGELOG.md) for what's actually land
 
 ## Documents
 
-- **Source PRD:** [`Bridget Ukeni_Vibe Code Africa Project_AI_Maternal Health_OS_PRD.pdf`](Bridget%20Ukeni_Vibe%20Code%20Africa%20Project_AI_Maternal%20Health_OS_PRD.pdf)
+> **Everything below lives under `docs/`, which is local-only** (gitignored — see
+> `.gitignore`) and won't be visible on the public GitHub repo. These links work if you have
+> the repo checked out locally; they'll 404 on GitHub.
+
+- **Source PRD:** [`docs/Bridget Ukeni_Vibe Code Africa Project_AI_Maternal Health_OS_PRD.pdf`](docs/Bridget%20Ukeni_Vibe%20Code%20Africa%20Project_AI_Maternal%20Health_OS_PRD.pdf)
   — the full Product Requirements Document / Software Requirements Specification this
   build is scoped from. A Markdown copy for easier reference/linking is at
   [`docs/PRD.md`](docs/PRD.md).
