@@ -32,10 +32,34 @@ each build phase follows. Kept up to date as work lands, same as the decision lo
   all four plans' database-workflow instructions in line with Plan 1's `apply_migration`
   MCP-based approach.
 
-### Backend Build — Plan 1: Backend Foundation (in progress)
+### Backend Build — Plan 1: Backend Foundation — ✅ Complete
 
 - `28d90f8` — NestJS project scaffolded with a health check endpoint.
 - `23226a3` — Supabase project connection service (`SupabaseService`) added.
 - `70ad191` — Core schema migration applied to the live `amhos` project: `facility`,
   `person`, `app_user` tables.
-- *(updated as the build agent continues through Plan 1's remaining tasks)*
+- `b062b6c` — Tenant-isolation RLS policies added. **Found and fixed two real bugs**: an
+  RLS-policy infinite recursion (Postgres `54001`) and, once fixed, the helper function
+  being unintentionally exposed over the REST API — moved to a non-exposed `private` schema.
+  See the full [execution report](docs/superpowers/executions/2026-08-01-backend-foundation-execution.md)
+  for all bugs found/fixed and deviations from the plan's literal text.
+- `d71569e` — JWT auth guard + `CurrentUser` decorator.
+- `09a9a3e` — Role-based access guard.
+- `9d42911` — Immutable audit event log.
+- `15a5e90` — Facility module (create, list-by-accepting-referrals).
+- `067ba07` — Identity module with duplicate-detecting person registration.
+- `d6738e9` — Admin-only staff user creation.
+- `a963958` — Fixed `auth_app_user()` references across all 8 plan documents to match what
+  was actually built (`private.auth_app_user()`), since the rename from `b062b6c` above
+  rippled into every plan that writes its own RLS policies against this helper.
+- **All 10 tasks complete.** 15 unit tests + 5 e2e tests passing against the real `amhos`
+  project. Full details: [execution report](docs/superpowers/executions/2026-08-01-backend-foundation-execution.md).
+
+### Frontend Build — Plan 5: Frontend Foundation + CHW/Nurse Dashboard (in progress)
+
+- `3533b6c` — Next.js frontend scaffolded with Jest/RTL test harness.
+- `6613229` — Supabase browser and server client factories.
+- `d1230b3` — Typed `apiFetch` client with `ApiError`.
+- *(updated as the build agent continues through Plan 5's remaining tasks; running in
+  parallel with the backend build above, since it lives in a separate `frontend/` directory
+  and its test suite mocks all backend calls)*

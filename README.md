@@ -16,8 +16,10 @@ first — it's kept as a ready-to-build spec for a later phase, not abandoned. S
 
 ## Status
 
-All 8 implementation plans for the staff platform MVP are written. Backend build (Plan 1:
-Backend Foundation) is in progress against the real hosted Supabase project. See
+All 8 implementation plans for the staff platform MVP are written. **Plan 1 (Backend
+Foundation) is fully executed** — real code, real tests, real commits against the hosted
+Supabase project; see its execution report for what actually happened, including real bugs
+found and fixed along the way. Plan 5 (Frontend Foundation) is executing now. See
 [`CHANGELOG.md`](CHANGELOG.md) for what's actually landed so far.
 
 ## Documents
@@ -38,6 +40,11 @@ Backend Foundation) is in progress against the real hosted Supabase project. See
   covering the whole MVP: Backend Foundation, Episode & Task Management, Risk Scoring
   Engine, Referral Lifecycle, Frontend Foundation + CHW/Nurse Dashboard, Clinician
   Dashboard, Supervisor Dashboard, Admin Dashboard.
+- **Execution reports:** [`docs/superpowers/executions/`](docs/superpowers/executions/) —
+  one report per plan once it's actually built (not just planned): which tasks completed,
+  real bugs found and fixed, deviations from the plan's literal text and why, and final
+  verification results. The plan documents describe what *should* be built; these describe
+  what *was* built.
 
 ## Stack
 
