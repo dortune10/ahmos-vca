@@ -73,7 +73,9 @@ for the full list):**
 - **This plan adds zero migrations.** `IdentityService.findByIds()` is a new read method
   against the existing `person` table, using the existing `person_tenant_isolation` RLS
   `select` policy Plan 1's Task 4 already wrote (`tenant_id = (select tenant_id from
-  auth_app_user())`). That policy filters rows regardless of the client-side query shape
+  private.auth_app_user())` — note the `private.` schema qualifier, required after a real
+  recursion/security-exposure bug found during Plan 1's execution; `public.auth_app_user()`
+  no longer exists). That policy filters rows regardless of the client-side query shape
   (`.eq(...)` vs `.in(...)`), so no new policy is needed. If this were ever proven wrong,
   the fix would be a new migration file — this plan asserts it is not needed and shows why
   in Task 1, rather than skipping the question.
@@ -3174,9 +3176,10 @@ letter of the brief. The one real Nav change this plan needs — a second link,
 Task 2.
 
 **Backend RLS/migration check:** Task 1 adds no migration. `person_tenant_isolation`'s
-existing `select` policy (`tenant_id = (select tenant_id from auth_app_user())`) filters
-returned rows independent of whether the query used `.eq()` or `.in()` — verified by reading
-the policy definition directly in Plan 1's migration file, not assumed from the pattern
+existing `select` policy (`tenant_id = (select tenant_id from private.auth_app_user())` —
+`private.` qualifier as noted above) filters returned rows independent of whether the query
+used `.eq()` or `.in()` — verified by reading the policy definition directly in Plan 1's
+migration file, not assumed from the pattern
 holding for `phone`.
 
 No issues found requiring further fixes.

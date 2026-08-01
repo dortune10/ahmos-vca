@@ -319,8 +319,10 @@ git commit -m "feat: add risk_assessment schema migration"
 - Test: `backend/test/risk-assessment-rls.e2e-spec.ts`
 
 **Interfaces:**
-- Consumes: `risk_assessment` table (Task 1), the `auth_app_user()` helper function (Plan 1
-  Task 4), the `pregnancy_episode -> facility -> tenant_id` join pattern (Plan 2 Task 2).
+- Consumes: `risk_assessment` table (Task 1), the `private.auth_app_user()` helper function
+  (Plan 1 Task 4 — `private.` schema qualifier required after a real recursion/security-
+  exposure bug found during Plan 1's execution; `public.auth_app_user()` no longer exists),
+  the `pregnancy_episode -> facility -> tenant_id` join pattern (Plan 2 Task 2).
 - Produces: a tenant-isolation `select` policy and a tenant-isolation `update` policy on
   `risk_assessment`. **Deliberately no `insert` policy** for the authenticated/anon role —
   see the code comment in Step 3 for why.
@@ -498,7 +500,7 @@ create policy "risk_assessment_select_tenant" on risk_assessment
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   );
 
@@ -507,14 +509,14 @@ create policy "risk_assessment_update_tenant" on risk_assessment
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   )
   with check (
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   );
 -- Deliberately no insert policy for the anon-key/authenticated role: the only insert path

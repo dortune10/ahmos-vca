@@ -389,7 +389,9 @@ git commit -m "feat: add referral table and extend pregnancy_episode.status with
 - Test: `backend/test/referral-rls.e2e-spec.ts`
 
 **Interfaces:**
-- Consumes: `referral` table (Task 1), `auth_app_user()` helper (Plan 1, Task 4).
+- Consumes: `referral` table (Task 1), `private.auth_app_user()` helper (Plan 1, Task 4 —
+  `private.` schema qualifier required after a real recursion/security-exposure bug found
+  during Plan 1's execution; `public.auth_app_user()` no longer exists).
 - Produces: tenant-isolation RLS policies on `referral`, joined through
   `pregnancy_episode_id -> pregnancy_episode.facility_id -> facility.tenant_id` per this
   plan's Global Constraints. Every later task in this plan relies on these policies already
@@ -571,7 +573,7 @@ create policy "referral_select_tenant" on referral
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   );
 
@@ -580,7 +582,7 @@ create policy "referral_insert_tenant" on referral
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   );
 
@@ -589,14 +591,14 @@ create policy "referral_update_tenant" on referral
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   )
   with check (
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   );
 -- No delete policy: referrals are never deleted, only transitioned to a terminal status

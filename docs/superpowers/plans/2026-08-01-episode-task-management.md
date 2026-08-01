@@ -312,7 +312,9 @@ git commit -m "feat: add pregnancy_episode, encounter_note, care_task schema mig
 
 **Interfaces:**
 - Consumes: `pregnancy_episode`, `encounter_note`, `care_task` tables (Task 1), the
-  `auth_app_user()` helper function (Plan 1, Task 4).
+  `private.auth_app_user()` helper function (Plan 1, Task 4 — note the `private.` schema
+  qualifier, required after a real recursion/security-exposure bug found during Plan 1's
+  execution; the unqualified `public.auth_app_user()` no longer exists).
 - Produces: tenant-isolation RLS policies on all three tables, joined through
   `facility_id`/`pregnancy_episode_id` per the Global Constraints note above. Every later
   service in this plan (`EpisodeService`, `TasksService`) relies on these policies already
@@ -445,20 +447,20 @@ Create `supabase/migrations/00000000000005_episode_task_rls_policies.sql`:
 ```sql
 create policy "pregnancy_episode_select_tenant" on pregnancy_episode
   for select using (
-    facility_id in (select id from facility where tenant_id = (select tenant_id from auth_app_user()))
+    facility_id in (select id from facility where tenant_id = (select tenant_id from private.auth_app_user()))
   );
 
 create policy "pregnancy_episode_insert_tenant" on pregnancy_episode
   for insert with check (
-    facility_id in (select id from facility where tenant_id = (select tenant_id from auth_app_user()))
+    facility_id in (select id from facility where tenant_id = (select tenant_id from private.auth_app_user()))
   );
 
 create policy "pregnancy_episode_update_tenant" on pregnancy_episode
   for update using (
-    facility_id in (select id from facility where tenant_id = (select tenant_id from auth_app_user()))
+    facility_id in (select id from facility where tenant_id = (select tenant_id from private.auth_app_user()))
   )
   with check (
-    facility_id in (select id from facility where tenant_id = (select tenant_id from auth_app_user()))
+    facility_id in (select id from facility where tenant_id = (select tenant_id from private.auth_app_user()))
   );
 
 create policy "encounter_note_select_tenant" on encounter_note
@@ -466,7 +468,7 @@ create policy "encounter_note_select_tenant" on encounter_note
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   );
 
@@ -475,7 +477,7 @@ create policy "encounter_note_insert_tenant" on encounter_note
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   );
 -- No update/delete policy: encounter notes are append-only from the application's
@@ -486,7 +488,7 @@ create policy "care_task_select_tenant" on care_task
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   );
 
@@ -495,7 +497,7 @@ create policy "care_task_insert_tenant" on care_task
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   );
 
@@ -504,14 +506,14 @@ create policy "care_task_update_tenant" on care_task
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   )
   with check (
     pregnancy_episode_id in (
       select pe.id from pregnancy_episode pe
       join facility f on f.id = pe.facility_id
-      where f.tenant_id = (select tenant_id from auth_app_user())
+      where f.tenant_id = (select tenant_id from private.auth_app_user())
     )
   );
 ```

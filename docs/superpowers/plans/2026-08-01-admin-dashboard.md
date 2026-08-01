@@ -596,7 +596,10 @@ git commit -m "feat: add admin-only GET /api/v1/audit-events endpoint"
 **How the RLS gap behind this endpoint was found (already fixed in Plan 1, not by this
 task):** while scoping this endpoint, an earlier pass over this plan noticed that Plan 1's
 RLS migration (`supabase/migrations/00000000000002_core_rls_policies.sql`) gave `facility`
-only a `select` policy:
+only a `select` policy. This snippet is a historical illustration of that gap as originally
+written — it also predates an unrelated fix made during Plan 1's actual execution
+(`auth_app_user()` moved to `private.auth_app_user()` to fix a real recursion bug); the
+currently-shipped migration uses the qualified name throughout, see Plan 1's Task 4:
 
 ```sql
 create policy "facility_tenant_isolation" on facility
