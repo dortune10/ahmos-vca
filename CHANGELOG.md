@@ -55,11 +55,33 @@ each build phase follows. Kept up to date as work lands, same as the decision lo
 - **All 10 tasks complete.** 15 unit tests + 5 e2e tests passing against the real `amhos`
   project. Full details: [execution report](docs/superpowers/executions/2026-08-01-backend-foundation-execution.md).
 
-### Frontend Build — Plan 5: Frontend Foundation + CHW/Nurse Dashboard (in progress)
+### Frontend Build — Plan 5: Frontend Foundation + CHW/Nurse Dashboard — ✅ Complete
 
 - `3533b6c` — Next.js frontend scaffolded with Jest/RTL test harness.
 - `6613229` — Supabase browser and server client factories.
 - `d1230b3` — Typed `apiFetch` client with `ApiError`.
-- *(updated as the build agent continues through Plan 5's remaining tasks; running in
-  parallel with the backend build above, since it lives in a separate `frontend/` directory
-  and its test suite mocks all backend calls)*
+- `51b691b` — `Button`, `Input`, `Card`, `Table` shared UI primitives.
+- `0c38348` — `getCurrentAppUser` and `CurrentUserProvider`/`useCurrentUser`.
+- `b2e1ebe` — Staff login page.
+- `561e43f` — Shared dashboard shell with role-based routing and nav.
+- `1d8853b` — CHW/Nurse caseload list.
+- `7d5cbef` — Role-aware quick registration form.
+- `b6101cb` — Visit checklist.
+- `bdf1954` — Role-aware encounter note form.
+- **All 11 tasks complete.** 43 tests passing (16 suites), built entirely in parallel with
+  the backend build above — no file conflicts, no runtime dependency. Full details:
+  [execution report](docs/superpowers/executions/2026-08-01-frontend-foundation-execution.md).
+
+### First Real Preview
+
+- `9bc2428` — Fixed a real startup bug (`import type` needed for `CurrentUserPayload` in
+  three controllers — `nest start --watch` enforces `isolatedModules`, which `npm test`
+  didn't). Both dev servers started (`.claude/launch.json`: backend on :3000, frontend on
+  :3001) and confirmed working: backend health check returns `{"status":"ok"}`, frontend
+  correctly redirects unauthenticated visitors to the login page.
+- Created a one-time bootstrap admin account (`entravabot@gmail.com`) directly via the
+  Supabase Auth Admin API + a matching `app_user` insert, since no plan currently provides a
+  way to create the *first* admin (`POST /api/v1/users` requires being an admin already —
+  see `docs/DECISIONS.md` "Still Open" for the real fix this needs later). Verified the
+  account can actually log in via a real Supabase Auth password-grant call before handing
+  off credentials.

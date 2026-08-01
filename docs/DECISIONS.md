@@ -241,6 +241,13 @@ second attempt connected correctly.
 ## Still Open
 
 - Relationship between this VCA-Health build and the original AMHOS repo (decision #1).
+- **No real first-admin bootstrap flow exists.** `POST /api/v1/users` (Plan 1) requires
+  being authenticated as an admin already — a genuine chicken-and-egg gap none of the 8
+  plans address. Worked around on 2026-08-01 with a one-time manual bootstrap (direct
+  Supabase Auth Admin API call + matching `app_user` insert, done outside the app entirely)
+  to get a working `entravabot@gmail.com` admin account for local testing. Needs a real
+  answer before any real deployment: a seed script, a one-time CLI/migration-based bootstrap
+  step, or an invite-only signup flow — not decided yet.
 - **Action item, not just a question:** move dev/test off the shared `amhos` project onto
   an isolated branch or separate project before any real patient/staff data exists there
   (decision #23) — must happen before go-live, not "someday."
