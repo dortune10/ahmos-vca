@@ -105,6 +105,25 @@ green while the app itself couldn't boot. Fixed by changing all three imports to
 plans' "final verification" step: also run the actual start/build command, not just the
 test suite** — a passing test suite is necessary but not sufficient proof the app runs.
 
+## Addendum 2: `.env` was never actually loaded by the running app
+
+A second, more serious gap in what "all tests pass" actually proved: NestJS's CLI does
+**not** load `.env` files automatically (that requires either `@nestjs/config`'s
+`ConfigModule` or an explicit `dotenv` call — this plan set up neither). Every unit/e2e test
+happened to work anyway because each test file sets `process.env.SUPABASE_*` directly
+(visible in `supabase.service.spec.ts`, `rls.e2e-spec.ts`, etc.), and the health check
+endpoint never touches `SupabaseService` at all. This meant the *only* thing "the app boots
+and responds" (Addendum 1's fix) actually proved was that `GET /api/v1/health` works — every
+real endpoint (`facilities`, `persons`, `users`) was silently broken the whole time,
+throwing `Error: supabaseUrl is required.` from `SupabaseClient`'s constructor the moment
+`AuthGuard` tried to build a request-scoped client. Not caught until manually testing a real
+authenticated `POST /api/v1/users` call some time after Addendum 1's fix, once a
+second working account (a nurse, for dashboard testing) was needed. Fixed by installing
+`dotenv` and adding `import 'dotenv/config';` as the first line of `main.ts`. **Second lesson
+layered onto the first: "the app starts and serves a request" is still not proof it works —
+specifically exercise at least one endpoint that touches every major dependency (here:
+Supabase) before calling verification done.**
+
 ## Follow-up Impact on Other Plans
 
 The `private.auth_app_user()` rename rippled outward: every plan that writes its own RLS
