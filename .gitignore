@@ -30,3 +30,6 @@ docs/superpowers/design-v1.md
 
 # Backend (redundant with generic patterns above, kept explicit per plan)
 backend/dist/
+
+# Frontend (redundant with generic patterns above, kept explicit per plan)
+frontend/.next/
