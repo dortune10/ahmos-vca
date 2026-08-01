@@ -31,9 +31,10 @@ Jest + Supertest, Supabase CLI for linking/migrations against the hosted project
   authorization mechanism — do not add manual `tenant_id`/`facility_id` filtering in
   application code as a substitute for RLS (it should be redundant-safe, but RLS is the
   source of truth).
-- Migrations are plain SQL files in `supabase/migrations/`, applied via `supabase db push`
-  against the linked project (see "Database" below) — never hand-edit the database outside
-  a migration file.
+- Migrations are plain SQL files in `supabase/migrations/`, applied via the Supabase MCP's
+  `apply_migration` tool (see "Database" below for exactly how) — never hand-edit the
+  database outside a migration file, and never use the CLI's `supabase db push` (requires an
+  interactive database password prompt this plan avoids entirely).
 - Every table has `created_at timestamptz default now()`; tables holding business data (not
   `audit_event`) also get `updated_at timestamptz default now()`.
 - **Database: one hosted project, no local Docker, no paid branch.** This project (`amhos`,
@@ -46,9 +47,24 @@ Jest + Supertest, Supabase CLI for linking/migrations against the hosted project
   data exists in this project**: at that point, tests need to move to an isolated branch or
   separate project rather than running against the same database as real users. Treat that
   as a hard prerequisite for going live, not optional cleanup.
-  - Link once: `npx supabase link --project-ref wjgyivxvmqchlhgmxcxe`.
-  - Apply migrations: `npx supabase db push` (this is the "run the migration" step
-    throughout this plan — replaces what would otherwise be a local `supabase db reset`).
+  - **Apply migrations via the Supabase MCP tool, not the CLI.** Every "Apply the
+    migration" step in this plan means: call the `apply_migration` MCP tool with
+    `project_id: "wjgyivxvmqchlhgmxcxe"`, `name: "<migration filename without the numeric
+    prefix, snake_case>"`, `query: "<the exact SQL from that task's migration file>"`. This
+    is deliberate, not a shortcut: the CLI's `supabase link`/`db push` path requires the
+    project's database password interactively, which is a credential nobody should be
+    typing into an agent's terminal session or hardcoding anywhere. The MCP tool is already
+    authenticated (OAuth-based) and needs no password. Still create the actual `.sql` file
+    in `supabase/migrations/` in every task exactly as written — that's the version-controlled
+    source of truth this plan's Global Constraints already require; the MCP call is just how
+    that same SQL gets executed against the project, replacing what a CLI-based workflow
+    would call `supabase db push`.
+  - **After any migration that adds or changes RLS policies** (Task 4 especially), also call
+    the `get_advisors` MCP tool with `type: "security"` and read the result — it flags
+    missing RLS policies automatically (e.g. a table with RLS enabled but no policy for some
+    operation) and would have caught this plan's own facility-insert/update policy gap
+    immediately instead of it surfacing later during Plan 8. Treat any finding it reports as
+    something to fix in the same task, not a followup.
   - `backend/.env` values come from this project's dashboard (Settings → API): project URL,
     anon/publishable key, and the service_role key (service_role key is never exposed via
     any MCP/API integration — copy it from the dashboard directly, by hand, and never commit
@@ -196,19 +212,21 @@ git commit -m "feat: scaffold NestJS backend with health check endpoint"
   - `getServiceClient(): SupabaseClient` — service-role client that bypasses RLS, for
     system-triggered writes only (used later by `audit` and `risk` modules).
 
-- [ ] **Step 1: Initialize and link the Supabase project**
+- [ ] **Step 1: Initialize the local Supabase folder structure**
 
 Run:
 ```bash
 cd /Users/dot/Documents/Projects/VCA-Health
 npx supabase init
-npx supabase link --project-ref wjgyivxvmqchlhgmxcxe
 ```
 
-`link` will prompt for the project's database password (from the dashboard, Settings →
-Database) — this is a one-time local credential, not something to hardcode anywhere. This
-project is used directly for dev/test (see Global Constraints above) — there is no
-`supabase start`/local Docker stack in this plan.
+This just creates `supabase/config.toml` and the `supabase/migrations/` directory as a
+version-controlled home for migration SQL files — it does **not** link the CLI to the
+project and does **not** prompt for a database password. Do not run `supabase link` or
+`supabase db push` anywhere in this plan: every "apply the migration" step uses the
+`apply_migration` MCP tool instead (see Global Constraints), which is already authenticated
+and needs no database credential. This project is used directly for dev/test (see Global
+Constraints above) — there is no `supabase start`/local Docker stack in this plan.
 
 Create `backend/.env` (not committed, matches `.env.example`'s keys) populated from the
 `amhos` project's dashboard (Settings → API): project URL
@@ -384,8 +402,9 @@ alter table app_user enable row level security;
 
 - [ ] **Step 2: Apply the migration**
 
-Run: `npx supabase db push`
-Expected: migration applies cleanly to the linked `amhos` project, no errors printed.
+Call the `apply_migration` MCP tool: `project_id: "wjgyivxvmqchlhgmxcxe"`,
+`name: "core_schema"`, `query: <the exact SQL from Step 1>`.
+Expected: applies cleanly to the `amhos` project, no errors returned.
 
 - [ ] **Step 3: Write the failing verification test**
 
@@ -596,9 +615,12 @@ create policy "app_user_self_and_tenant_admins" on app_user
 
 - [ ] **Step 4: Apply and run test to verify it passes**
 
-Run:
+Call the `apply_migration` MCP tool: `project_id: "wjgyivxvmqchlhgmxcxe"`,
+`name: "core_rls_policies"`, `query: <the exact SQL from Step 3>`. Then call the
+`get_advisors` MCP tool with `project_id: "wjgyivxvmqchlhgmxcxe"`, `type: "security"` and
+confirm it reports no missing-policy findings for `facility`, `person`, or `app_user`. Then
+run:
 ```bash
-npx supabase db push
 cd backend && npm run test:e2e -- rls.e2e-spec.ts
 ```
 Expected: PASS — revert the temporary Step 2 assertion back to the original
@@ -988,7 +1010,9 @@ create policy "audit_event_tenant_read" on audit_event
 
 - [ ] **Step 2: Apply the migration**
 
-Run: `npx supabase db push`
+Call the `apply_migration` MCP tool: `project_id: "wjgyivxvmqchlhgmxcxe"`,
+`name: "audit_event"`, `query: <the exact SQL from Step 1>`. Then call `get_advisors` with
+`type: "security"` and confirm no findings for `audit_event`.
 
 - [ ] **Step 3: Write the failing test**
 
