@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { KeyboardEvent, SyntheticEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,15 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(event: FormEvent) {
+  // Triggered directly from the button's onClick rather than the form's onSubmit event
+  // reaching React through native browser form-submission bubbling — in some environments
+  // (e.g. certain browser extensions that intercept form submit events, or automated
+  // testing tools that dispatch a native 'submit' rather than routing through React) that
+  // native path can silently fail to reach this handler, leaving the button apparently
+  // inert. Calling the handler directly from onClick removes that dependency entirely.
+  // The form's onSubmit is kept as a second path (see below) and Enter-key submission is
+  // handled explicitly since the submit button is no longer type="submit".
+  async function handleSubmit(event: SyntheticEvent) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
@@ -39,6 +47,14 @@ export default function LoginPage() {
     router.refresh();
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    // With the button no longer type="submit" (see handleSubmit's comment above), a form
+    // with two text inputs no longer implicitly submits on Enter — restore that directly.
+    if (event.key === 'Enter') {
+      handleSubmit(event);
+    }
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <Card className="w-full max-w-sm">
@@ -49,6 +65,7 @@ export default function LoginPage() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={handleKeyDown}
             required
           />
           <Input
@@ -56,6 +73,7 @@ export default function LoginPage() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={handleKeyDown}
             required
           />
           {error && (
@@ -63,7 +81,7 @@ export default function LoginPage() {
               {error}
             </p>
           )}
-          <Button type="submit" disabled={submitting}>
+          <Button type="button" onClick={handleSubmit} disabled={submitting}>
             {submitting ? 'Signing in...' : 'Sign in'}
           </Button>
         </form>
