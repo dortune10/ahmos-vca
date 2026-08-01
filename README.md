@@ -17,10 +17,13 @@ first — it's kept as a ready-to-build spec for a later phase, not abandoned. S
 ## Status
 
 All 8 implementation plans for the staff platform MVP are written. **Plans 1 (Backend
-Foundation) and 5 (Frontend Foundation) are fully executed and verified end-to-end in a
-live browser** — real code, real tests, real commits against the hosted Supabase project.
-See each plan's execution report for what actually happened, including real bugs found and
-fixed along the way. See [`CHANGELOG.md`](CHANGELOG.md) for what's actually landed so far.
+Foundation), 2 (Episode & Task Management), 3 (Risk Scoring Engine), 4 (Referral
+Lifecycle), 5 (Frontend Foundation), and 8 (Admin Dashboard) are fully executed and
+verified end-to-end in a live browser** — real code, real tests, real commits against the
+hosted Supabase project. Only **Plans 6 (Clinician Dashboard) and 7 (Supervisor
+Dashboard)** remain, both unblocked. See each plan's execution report for what actually
+happened, including real bugs found and fixed along the way. See
+[`CHANGELOG.md`](CHANGELOG.md) for what's actually landed so far.
 
 ## Local Setup
 
@@ -84,7 +87,61 @@ fixed along the way. See [`CHANGELOG.md`](CHANGELOG.md) for what's actually land
 - **Messaging (deferred feature):** Meta WhatsApp Cloud API — part of the deferred WhatsApp
   assistant, a separate use of Claude API from the one above
 
+## Deployment
+
+Standard split for this stack: **Vercel** serves the Next.js frontend (it's a natural fit,
+serverless-native); the NestJS backend is a persistent server, not a serverless function, so
+it runs on **Railway** instead. Both point at the same hosted Supabase project used for
+local dev.
+
+### 1. Backend → Railway
+
+1. [railway.app](https://railway.app) → sign in with GitHub → New Project → Deploy from
+   GitHub repo → select this repo.
+2. In the new service's **Settings**: set **Root Directory** to `backend`.
+3. Set **Build Command** to `npm run build`, **Start Command** to `npm run start:prod`.
+4. Add environment variables (copy real values from your local `backend/.env` — never
+   commit them): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+   `ANTHROPIC_API_KEY` (blank is fine — the risk engine falls back to rule-only scoring),
+   `ANTHROPIC_MODEL=claude-sonnet-5`. Leave `FRONTEND_URL` unset for now — you'll set it in
+   step 3 below, after the frontend has a URL.
+5. Deploy. Railway gives you a public URL (`https://<something>.up.railway.app`) — you need
+   it in the next step. Confirm it's live: `curl https://<railway-url>/api/v1/health` should
+   return `{"status":"ok"}`.
+
+### 2. Frontend → Vercel
+
+1. [vercel.com](https://vercel.com) → sign in with GitHub → Add New → Project → import this
+   repo.
+2. Set **Root Directory** to `frontend`.
+3. Add environment variables: `NEXT_PUBLIC_API_BASE_URL` = your Railway URL from step 1.5,
+   `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (same values as the
+   backend's `SUPABASE_URL`/`SUPABASE_ANON_KEY` — the anon key is safe client-side by
+   design, RLS is the real access control).
+4. Deploy. Vercel gives you a URL like `https://<project>.vercel.app`.
+
+### 3. Close the loop
+
+Back in Railway, set `FRONTEND_URL` to the Vercel URL from step 2.4 and redeploy the
+backend (Railway usually redeploys automatically on env var change). This is what allows
+CORS to accept requests from the live frontend — without it, every data page will fail with
+"Failed to load..." exactly like the local CORS bug fixed on 2026-08-01.
+
+### 4. Verify
+
+Visit the Vercel URL, sign in with an admin account (bootstrap one against the same shared
+Supabase project with `npm run bootstrap:admin`, same as local setup), and confirm
+Admin/Facilities/Staff pages load real data with no console/network errors.
+
+**Notes:**
+- CORS currently allows exactly one origin (`FRONTEND_URL`). If you add Vercel preview
+  deployments or multiple frontend URLs later, `backend/src/main.ts`'s `enableCors` call
+  will need to become an allow-list instead of a single string.
+- Both environments share the same `amhos` Supabase project used for local dev — see
+  `docs/DECISIONS.md` #23 and its "Still Open" note about moving off it before real patient
+  data exists. That applies with extra urgency once this is publicly reachable.
+
 ## Next Steps
 
-Execute Plans 2, 3, 4, and 8 (backend) and 6, 7 (frontend) in dependency order — each is
-now unblocked by Plan 1 and/or Plan 5 having landed.
+Execute Plans 6 (Clinician Dashboard) and 7 (Supervisor Dashboard) — both are written and
+fully unblocked now that Plans 3 and 4 have landed.
