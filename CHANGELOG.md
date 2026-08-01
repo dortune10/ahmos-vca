@@ -107,3 +107,14 @@ each build phase follows. Kept up to date as work lands, same as the decision lo
   mixed in with real data (a `tenant_id = 11111111-...` row from e2e test runs) — logged as
   a follow-up in `docs/DECISIONS.md`, not urgent since it's test junk not patient data.
   Decision #24.
+- `68cb169` — Real bug: the backend never actually loaded `backend/.env` (NestJS's CLI
+  doesn't do this automatically). Every unit/e2e test set env vars directly in the test
+  code, and the health check never touches Supabase, so this stayed invisible through both
+  "tests pass" and "the app starts and responds" verification — every real endpoint
+  (`facilities`, `persons`, `users`) was silently throwing `supabaseUrl is required` the
+  whole time. Found while creating a second (nurse) test account via the real
+  `POST /api/v1/users` API. Fixed with `dotenv`; verified the same call now succeeds.
+  Documented as Addendum 2 in Plan 1's execution report.
+- Created `nurse-demo@example.com` via the real, now-working admin-authenticated API — the
+  first fully real end-to-end account creation (login → admin session → API call → new
+  account), not another manual bootstrap.
