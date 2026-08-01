@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
-describe('FacilityController (e2e)', () => {
+describe('TasksController (e2e)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
@@ -12,6 +12,7 @@ describe('FacilityController (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api/v1');
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     await app.init();
   });
 
@@ -19,17 +20,13 @@ describe('FacilityController (e2e)', () => {
     await app.close();
   });
 
-  it('rejects facility creation with no auth token', () => {
-    return request(app.getHttpServer())
-      .post('/api/v1/facilities')
-      .send({ name: 'Test', type: 'clinic' })
-      .expect(401);
+  it('rejects listing tasks with no auth token', () => {
+    return request(app.getHttpServer()).get('/api/v1/tasks').expect(401);
   });
 
-  it('rejects facility update with no auth token', () => {
+  it('rejects completing a task with no auth token', () => {
     return request(app.getHttpServer())
-      .patch('/api/v1/facilities/11111111-1111-1111-1111-111111111111')
-      .send({ acceptingReferrals: true })
+      .post('/api/v1/tasks/11111111-1111-1111-1111-111111111111/complete')
       .expect(401);
   });
 });

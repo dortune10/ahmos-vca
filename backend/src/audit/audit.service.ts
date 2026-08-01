@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../common/supabase/supabase.service';
+import { AuditEventResponseDto } from './dto/audit-event-response.dto';
 
 export interface AuditLogEntry {
   tenantId: string;
@@ -8,6 +9,11 @@ export interface AuditLogEntry {
   entityId: string;
   action: string;
   metadata: Record<string, unknown>;
+}
+
+export interface AuditEventFilters {
+  entityType?: string;
+  entityId?: string;
 }
 
 @Injectable()
@@ -24,5 +30,21 @@ export class AuditService {
       action: entry.action,
       metadata_json: entry.metadata,
     });
+  }
+
+  async list(jwt: string, filters?: AuditEventFilters): Promise<AuditEventResponseDto[]> {
+    const client = this.supabaseService.getClientForUser(jwt);
+    let query = client.from('audit_event').select('*').order('event_time', { ascending: false });
+    if (filters?.entityType) {
+      query = query.eq('entity_type', filters.entityType);
+    }
+    if (filters?.entityId) {
+      query = query.eq('entity_id', filters.entityId);
+    }
+    const { data, error } = await query;
+    if (error) {
+      throw error;
+    }
+    return (data ?? []).map(AuditEventResponseDto.fromRow);
   }
 }

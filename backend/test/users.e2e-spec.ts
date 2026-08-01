@@ -3,7 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
-describe('FacilityController (e2e)', () => {
+describe('UsersController list (e2e)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
@@ -19,17 +19,7 @@ describe('FacilityController (e2e)', () => {
     await app.close();
   });
 
-  it('rejects facility creation with no auth token', () => {
-    return request(app.getHttpServer())
-      .post('/api/v1/facilities')
-      .send({ name: 'Test', type: 'clinic' })
-      .expect(401);
-  });
-
-  it('rejects facility update with no auth token', () => {
-    return request(app.getHttpServer())
-      .patch('/api/v1/facilities/11111111-1111-1111-1111-111111111111')
-      .send({ acceptingReferrals: true })
-      .expect(401);
+  it('rejects a request with no auth token', () => {
+    return request(app.getHttpServer()).get('/api/v1/users').expect(401);
   });
 });

@@ -60,3 +60,44 @@ describe('UsersService', () => {
     );
   });
 });
+
+describe('UsersService.list', () => {
+  it('returns staff users mapped to StaffUserResponseDto', async () => {
+    const row = {
+      id: 'auth-user-1',
+      tenant_id: 't1',
+      email: 'nurse@example.com',
+      role: 'nurse',
+      facility_id: 'f1',
+      full_name: 'Nurse Joy',
+    };
+    const selectMock = jest.fn().mockResolvedValue({ data: [row], error: null });
+    const fakeUserClient = { from: () => ({ select: selectMock }) };
+    const supabaseService = {
+      getClientForUser: jest.fn().mockReturnValue(fakeUserClient),
+    } as unknown as SupabaseService;
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: SupabaseService, useValue: supabaseService },
+        { provide: AuditService, useValue: { log: jest.fn() } },
+      ],
+    }).compile();
+    const service = module.get<UsersService>(UsersService);
+
+    const result = await service.list('jwt');
+
+    expect(supabaseService.getClientForUser).toHaveBeenCalledWith('jwt');
+    expect(result).toEqual([
+      {
+        id: 'auth-user-1',
+        tenantId: 't1',
+        email: 'nurse@example.com',
+        role: 'nurse',
+        facilityId: 'f1',
+        fullName: 'Nurse Joy',
+      },
+    ]);
+  });
+});

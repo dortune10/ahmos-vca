@@ -3,6 +3,7 @@ import { SupabaseService } from '../common/supabase/supabase.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateFacilityDto } from './dto/create-facility.dto';
 import { FacilityResponseDto } from './dto/facility-response.dto';
+import { UpdateFacilityDto } from './dto/update-facility.dto';
 
 @Injectable()
 export class FacilityService {
@@ -56,5 +57,42 @@ export class FacilityService {
       throw error;
     }
     return (data ?? []).map(FacilityResponseDto.fromRow);
+  }
+
+  async update(
+    jwt: string,
+    actorUserId: string,
+    tenantId: string,
+    id: string,
+    dto: UpdateFacilityDto,
+  ): Promise<FacilityResponseDto> {
+    const client = this.supabaseService.getClientForUser(jwt);
+    const patch: Record<string, unknown> = {};
+    if (dto.name !== undefined) patch.name = dto.name;
+    if (dto.type !== undefined) patch.type = dto.type;
+    if (dto.contactPhone !== undefined) patch.contact_phone = dto.contactPhone;
+    if (dto.acceptingReferrals !== undefined) patch.accepting_referrals = dto.acceptingReferrals;
+
+    const { data, error } = await client
+      .from('facility')
+      .update(patch)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId,
+      entityType: 'facility',
+      entityId: data.id,
+      action: 'updated',
+      metadata: patch,
+    });
+
+    return FacilityResponseDto.fromRow(data);
   }
 }
