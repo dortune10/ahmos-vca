@@ -134,6 +134,29 @@ each build phase follows. Kept up to date as work lands, same as the decision lo
   3, 4, 6, 7 can rely on the contract exactly as documented. Full details:
   [execution report](docs/superpowers/executions/2026-08-01-episode-task-management-execution.md).
 
+### Backend Build — Plan 3: Risk Scoring Engine — ✅ Complete
+
+- `4fbe605` / `e7e82e0` — `risk_assessment` schema + tenant-isolation RLS policies, applied
+  to the live `amhos` project (scoped via `private.auth_app_user()` + a join through
+  `pregnancy_episode`, matching Plans 1/2).
+- `0f0ca9d` — Deterministic rules engine (`RiskRulesEngineService`). Thresholds are real
+  obstetric reference ranges but **provisional / not clinically signed off** — that framing
+  lives in the code (a header comment block), not just the plan, per user requirement.
+- `b4840cf` — Claude API ML-assisted advisory tier (`RiskMlService`) with rule-only fallback.
+  Found and fixed a real `TS2769` build bug invisible to Jest: `@anthropic-ai/sdk`'s
+  `Tool.input_schema.required` is a mutable `string[]`, so the plan's `as const` tool
+  definition didn't type-check — only `tsc` caught it.
+- `a1c5edd` — `RiskService` pipeline (rules → optional ML → persist) + `@OnEvent` listeners
+  that auto-score on `episode.created` / `episode.clinical_data_updated`.
+- `b77b9c5` / `a31f23e` — Override + read methods, both controllers, `RiskModule` wired in.
+- **All 7 tasks complete.** Independently re-verified from a clean tree: 78 unit + 28 e2e
+  tests passing against the live project, clean build, no new security-advisor findings on
+  `risk_assessment`. Executed **solo** (not in parallel) after the earlier concurrent-git
+  lesson. **Caveat:** no real `ANTHROPIC_API_KEY` was available, so the ML tier has only run
+  against a mocked client — every real call currently hits the rule-only fallback until a key
+  is supplied. Full details:
+  [execution report](docs/superpowers/executions/2026-08-01-risk-scoring-engine-execution.md).
+
 ### Full-Stack Build — Plan 8: Admin Dashboard — ✅ Complete
 
 - `378470b` — Admin role added to `ROLE_HOME_ROUTE` + `/admin` landing page.
