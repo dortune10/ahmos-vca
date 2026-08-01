@@ -16,8 +16,9 @@ first — it's kept as a ready-to-build spec for a later phase, not abandoned. S
 
 ## Status
 
-Design complete for the staff platform (active MVP scope), not yet implemented. No
-application code exists in this repo yet.
+All 8 implementation plans for the staff platform MVP are written. Backend build (Plan 1:
+Backend Foundation) is in progress against the real hosted Supabase project. See
+[`CHANGELOG.md`](CHANGELOG.md) for what's actually landed so far.
 
 ## Documents
 
@@ -32,19 +33,28 @@ application code exists in this repo yet.
 - **Decision log:** [`docs/DECISIONS.md`](docs/DECISIONS.md) — every scope/architecture
   decision made on this project, with rationale and alternatives considered, kept current
   as the project progresses.
+- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md) — what's actually landed, in order.
+- **Implementation plans:** [`docs/superpowers/plans/`](docs/superpowers/plans/) — 8 plans
+  covering the whole MVP: Backend Foundation, Episode & Task Management, Risk Scoring
+  Engine, Referral Lifecycle, Frontend Foundation + CHW/Nurse Dashboard, Clinician
+  Dashboard, Supervisor Dashboard, Admin Dashboard.
 
-## Planned Stack
+## Stack
 
-- **Backend:** TypeScript / NestJS, modular monolith
-- **Frontend:** React + Next.js (staff web dashboards)
-- **Data:** Supabase (Postgres + Auth + Row-Level Security)
-- **AI:** Claude API (Anthropic) — used now for the risk-scoring engine's ML-assisted
-  advisory score (rules engine runs first; the model enriches, never gates, care workflows)
+- **Backend:** TypeScript / NestJS, modular monolith, `@supabase/supabase-js` directly (no
+  ORM — RLS is the real access-control layer, see `docs/DECISIONS.md` #21)
+- **Frontend:** React + Next.js App Router, Tailwind CSS (staff web dashboards)
+- **Data:** Supabase (Postgres + Auth + Row-Level Security) — hosted project `amhos`
+  (`wjgyivxvmqchlhgmxcxe`), used directly for dev/test for now; see `docs/DECISIONS.md` #23
+  for why, and the "Still Open" note about moving off it before real patient data exists
+- **AI:** Claude API (Anthropic) — used for the risk-scoring engine's ML-assisted advisory
+  score (rules engine runs first; the model enriches, never gates, care workflows)
 - **Messaging (deferred feature):** Meta WhatsApp Cloud API — part of the deferred WhatsApp
   assistant, a separate use of Claude API from the one above
 
 ## Next Steps
 
-1. User review of the staff platform design spec.
-2. Implementation plan (`superpowers:writing-plans`).
-3. Build.
+1. Finish executing Plan 1 (Backend Foundation).
+2. Run the cross-plan consistency pass (migration numbering, a couple of small DTO/gap
+   fixes surfaced while writing later plans) across Plans 2–8.
+3. Execute Plans 2–8 in dependency order.
