@@ -27,7 +27,9 @@ phase — it is deferred, not abandoned.
   facilities, audit trail (NestJS modular monolith, reused from the prior design)
 - Staff authentication and role-based access via Supabase Auth + RLS
 - Four staff-facing web dashboards:
-  - **CHW / Nurse** — caseload list, quick registration, task list
+  - **CHW / Nurse** — shared app shell with role-aware content (see Section 3): CHW gets a
+    simplified quick-registration form and visit checklist, nurse gets fuller encounter
+    documentation, both on the same caseload/task-list scaffolding
   - **Clinician** — facility triage board (case queue by risk/urgency), encounter notes,
     referral creation
   - **District Supervisor** — KPI dashboard, cohort views, SLA breach alerts
@@ -58,7 +60,13 @@ phase — it is deferred, not abandoned.
 `risk` module is new, added when risk scoring was pulled into MVP scope.
 
 **Frontend:** React + Next.js single application, role-based routing:
-- `/chw` — CHW/Nurse dashboard
+- `/frontline` — shared CHW/Nurse shell. Same route and page scaffolding for both roles;
+  the `role` on the logged-in `user` record controls which form/field set renders (CHW:
+  simplified quick-registration + visit checklist; Nurse: full encounter documentation),
+  not a separate app section. Chosen over a fully combined identical UI (doesn't fit either
+  role's actual workflow well) or fully separate `/chw` + `/nurse` routes (real PRD role
+  distinction, but doubles MVP frontend work for two roles that share most of their
+  underlying data and task list).
 - `/clinician` — clinician dashboard
 - `/supervisor` — district supervisor dashboard
 - `/admin` — tenant admin dashboard
@@ -100,9 +108,13 @@ with the deferred spec.
 
 ## 5. Core User Flows
 
-1. **Registration (CHW/Nurse):** search for existing person → create person + pregnancy
-   episode if new → assign initial care tasks (ANC schedule) → a risk assessment is
-   triggered automatically (see step 2) → episode appears on their caseload list.
+1. **Registration (CHW/Nurse, shared `/frontline` shell):** search for existing person →
+   create person + pregnancy episode if new → assign initial care tasks (ANC schedule) → a
+   risk assessment is triggered automatically (see step 2) → episode appears on their
+   caseload list. A CHW sees a simplified quick-registration form (minimum required fields,
+   large tap targets, per the PRD's low-literacy/field-conditions UX guidance); a nurse sees
+   the fuller facility-documentation form (encounter details, structured clinical fields).
+   Both write to the same `person`/`pregnancy_episode`/`care_task` tables.
 2. **Risk assessment (system, surfaced to Clinician):** triggered on registration and on
    any subsequent clinical data update (vitals, encounter notes). The rules engine runs
    first and always produces a `rule_score` and reason codes; the ML-assisted score
@@ -170,19 +182,18 @@ with the deferred spec.
 - AI (the risk-scoring ML enrichment) is advisory-only; clinicians retain override
   authority, per the PRD's "AI risk score is advisory, not autonomous clinical
   decision-making" rule.
-- Staff roles for MVP are CHW, Nurse (grouped with CHW for dashboard purposes), Clinician,
-  District Supervisor, and Tenant Admin — narrower than the PRD's full RBAC role list
-  (which also includes Facility Admin, Program Manager, Support, Integration Client);
-  those can be added later without a schema change (just new `role` enum values + RLS
-  policies).
+- Staff roles for MVP are CHW, Nurse, Clinician, District Supervisor, and Tenant Admin —
+  narrower than the PRD's full RBAC role list (which also includes Facility Admin, Program
+  Manager, Support, Integration Client); those can be added later without a schema change
+  (just new `role` enum values + RLS policies). CHW and Nurse share a `/frontline` app
+  shell with role-aware content rather than either an identical UI or fully separate routes
+  (see Section 3).
 
 ## 10. Open Questions
 
-1. **CHW vs Nurse dashboards:** treated as one combined view for MVP — confirm that's
-   correct rather than two distinct UIs.
-2. **Rule engine content:** the actual clinical rules (which vitals/history combinations
+1. **Rule engine content:** the actual clinical rules (which vitals/history combinations
    map to which risk band, and the specific thresholds) still need definition — likely with
    clinical input, not something to guess at in this design.
-3. Relationship between this VCA-Health build and the original AMHOS repo
+2. Relationship between this VCA-Health build and the original AMHOS repo
    (`/Users/dot/Documents/Projects/AMHOS/`) is still unresolved (carried over from the
    deferred spec's open questions).

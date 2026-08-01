@@ -172,6 +172,22 @@ otherwise removed all AI usage when the WhatsApp assistant was descoped (decisio
 worth remembering this isn't a fully AI-free build anymore, just AI-free on the *messaging*
 side.
 
+### 20. CHW/Nurse dashboard: shared shell, role-aware content
+**Decision:** CHW and Nurse share one `/frontline` route and page scaffolding; the
+logged-in user's `role` controls which form/field set renders (CHW: simplified
+quick-registration + visit checklist; Nurse: full encounter documentation). Both write to
+the same `person`/`pregnancy_episode`/`care_task` tables.
+**Alternatives considered:** Fully combined identical UI for both roles (what the spec
+originally assumed, before this was raised as an open question) — risked not fitting
+either role's actual workflow well, since the PRD treats CHW and Nurse/Midwife as distinct
+personas and RBAC roles with different permission scope, literacy assumptions, and daily
+tasks. Fully separate `/chw` and `/nurse` routes — most faithful to the PRD's role
+distinction, but doubles MVP frontend work for two roles that share most of their
+underlying data.
+**Why:** User picked the middle-ground option after I laid out the PRD's actual persona/
+RBAC distinction between the two roles (this had been glossed over when the dashboard was
+first scoped) and the three concrete options with trade-offs.
+
 ---
 
 ## Still Open
@@ -181,8 +197,6 @@ side.
   choice — not yet confirmed.
 - Actual clinical rule thresholds for the risk rules engine (decision #19) — needs clinical
   input, not something to define unilaterally.
-- CHW vs. combined CHW/Nurse dashboard — open question raised in the staff platform spec,
-  not yet answered.
 - Language/localization beyond the PRD's English-first default.
 - Clinical validation of risk-band language and any future danger-sign keyword list (needs
   a clinical advisor — same gap noted against the original AMHOS build).
