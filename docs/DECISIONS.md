@@ -238,16 +238,32 @@ second attempt connected correctly.
 
 ---
 
+### 24. First-admin bootstrap: a dedicated script, not a manual one-off
+**Decision:** Added `backend/scripts/bootstrap-admin.js` (`npm run bootstrap:admin --
+--email you@example.com`) — creates the Supabase Auth identity + matching `app_user` row
+(`role: 'admin'`) directly, the same way `UsersService.createStaffUser` does internally,
+without needing an existing admin session. Idempotent (refuses to duplicate an existing
+email) and reuses an existing tenant if any `app_user` rows already exist, rather than
+creating a disconnected admin in a brand-new empty tenant every run.
+**Why:** `POST /api/v1/users` (Plan 1) requires being authenticated as an admin already — a
+genuine chicken-and-egg gap none of the 8 plans address, first worked around on 2026-08-01
+with an ad-hoc manual curl-based process. User asked for this to become an actual reusable
+workflow rather than staying a one-off; this script replaces that manual process.
+**Not fully resolved:** this is a local/dev-time convenience script using the service-role
+key directly — not an invite-only signup flow or anything suitable for a real production
+bootstrap. Revisit before any real deployment (see "Still Open" below).
+
+---
+
 ## Still Open
 
 - Relationship between this VCA-Health build and the original AMHOS repo (decision #1).
-- **No real first-admin bootstrap flow exists.** `POST /api/v1/users` (Plan 1) requires
-  being authenticated as an admin already — a genuine chicken-and-egg gap none of the 8
-  plans address. Worked around on 2026-08-01 with a one-time manual bootstrap (direct
-  Supabase Auth Admin API call + matching `app_user` insert, done outside the app entirely)
-  to get a working `entravabot@gmail.com` admin account for local testing. Needs a real
-  answer before any real deployment: a seed script, a one-time CLI/migration-based bootstrap
-  step, or an invite-only signup flow — not decided yet.
+- Whether `bootstrap-admin.js` (decision #24) is sufficient long-term, or whether production
+  needs a proper invite-only/audited first-admin flow instead — not decided.
+- The shared `amhos` dev database has test-fixture pollution (e.g. a fixed
+  `tenant_id = 11111111-1111-1111-1111-111111111111` row from e2e test runs, discovered
+  while testing `bootstrap-admin.js`) mixed in with real data. Not urgent since it's test
+  junk, not patient data, but worth a cleanup pass before this matters more.
 - **Action item, not just a question:** move dev/test off the shared `amhos` project onto
   an isolated branch or separate project before any real patient/staff data exists there
   (decision #23) — must happen before go-live, not "someday."

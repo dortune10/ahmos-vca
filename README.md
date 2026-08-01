@@ -16,11 +16,32 @@ first — it's kept as a ready-to-build spec for a later phase, not abandoned. S
 
 ## Status
 
-All 8 implementation plans for the staff platform MVP are written. **Plan 1 (Backend
-Foundation) is fully executed** — real code, real tests, real commits against the hosted
-Supabase project; see its execution report for what actually happened, including real bugs
-found and fixed along the way. Plan 5 (Frontend Foundation) is executing now. See
-[`CHANGELOG.md`](CHANGELOG.md) for what's actually landed so far.
+All 8 implementation plans for the staff platform MVP are written. **Plans 1 (Backend
+Foundation) and 5 (Frontend Foundation) are fully executed and verified end-to-end in a
+live browser** — real code, real tests, real commits against the hosted Supabase project.
+See each plan's execution report for what actually happened, including real bugs found and
+fixed along the way. See [`CHANGELOG.md`](CHANGELOG.md) for what's actually landed so far.
+
+## Local Setup
+
+1. `cd backend && npm install`, `cd ../frontend && npm install`.
+2. Copy real values into `backend/.env` from the `amhos` Supabase project dashboard
+   (Settings → API): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+   `SUPABASE_JWT_SECRET`. See `docs/DECISIONS.md` #23 for why this project is used directly
+   rather than a local stack.
+3. Create `frontend/.env.local` with `NEXT_PUBLIC_API_BASE_URL=http://localhost:3000`,
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (same Supabase values as
+   above).
+4. Start both dev servers (`.claude/launch.json` has both configured: backend on `:3000`,
+   frontend on `:3001`).
+5. **Create your first admin account** — there's no self-serve signup and the normal
+   user-creation endpoint requires an existing admin, so bootstrap one directly:
+   ```bash
+   cd backend && npm run bootstrap:admin -- --email you@example.com
+   ```
+   Prints a generated password (or pass `--password` yourself). See `docs/DECISIONS.md` #24
+   for why this script exists instead of using the app's own UI/API for the first account.
+6. Log in at `http://localhost:3001/login` with that account.
 
 ## Documents
 
@@ -61,7 +82,5 @@ found and fixed along the way. Plan 5 (Frontend Foundation) is executing now. Se
 
 ## Next Steps
 
-1. Finish executing Plan 1 (Backend Foundation).
-2. Run the cross-plan consistency pass (migration numbering, a couple of small DTO/gap
-   fixes surfaced while writing later plans) across Plans 2–8.
-3. Execute Plans 2–8 in dependency order.
+Execute Plans 2, 3, 4, and 8 (backend) and 6, 7 (frontend) in dependency order — each is
+now unblocked by Plan 1 and/or Plan 5 having landed.

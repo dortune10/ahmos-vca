@@ -81,7 +81,29 @@ each build phase follows. Kept up to date as work lands, same as the decision lo
   correctly redirects unauthenticated visitors to the login page.
 - Created a one-time bootstrap admin account (`entravabot@gmail.com`) directly via the
   Supabase Auth Admin API + a matching `app_user` insert, since no plan currently provides a
-  way to create the *first* admin (`POST /api/v1/users` requires being an admin already —
-  see `docs/DECISIONS.md` "Still Open" for the real fix this needs later). Verified the
-  account can actually log in via a real Supabase Auth password-grant call before handing
-  off credentials.
+  way to create the *first* admin (`POST /api/v1/users` requires being an admin already).
+  Verified the account can actually log in via a real Supabase Auth password-grant call
+  before handing off credentials.
+- User reported the login page didn't work in their own browser. Live-debugged in an
+  automated browser and found two real, distinct bugs (neither was a test-suite gap — both
+  only surfaced by actually running the app):
+  1. The sign-in button relied on the native `<form>` `submit` event bubbling up to reach
+     React's `onSubmit` — unreliable in practice (confirmed React had hydrated correctly and
+     the handler was properly wired, but clicking fell through to the browser's native
+     full-page form submission instead of invoking it). Fixed by calling the handler
+     directly from the button's `onClick`, with an explicit Enter-key handler added to
+     preserve keyboard submission.
+  2. The real one: `app/page.tsx`'s post-login redirect fell back to `/login` whenever the
+     signed-in user's role had no entry in `ROLE_HOME_ROUTE` — since `admin` has no entry
+     yet (Plan 8 not executed), a **successful** admin sign-in looked identical to a failed
+     one. This is what actually made the bootstrap admin account appear broken. Fixed to
+     show an honest "signed in, no dashboard yet for this role" message instead.
+  Commit `8df1cb8`. User confirmed the fix in their own browser afterward.
+- `backend/scripts/bootstrap-admin.js` (`npm run bootstrap:admin`) — turned the one-time
+  manual bootstrap above into a proper reusable script per user request: idempotent (refuses
+  to duplicate an existing email), reuses an existing tenant if one already has staff in it.
+  Tested both paths (idempotency refusal, and a real create-then-delete round trip) before
+  committing. Surfaced along the way: the shared dev database has some test-fixture rows
+  mixed in with real data (a `tenant_id = 11111111-...` row from e2e test runs) — logged as
+  a follow-up in `docs/DECISIONS.md`, not urgent since it's test junk not patient data.
+  Decision #24.
