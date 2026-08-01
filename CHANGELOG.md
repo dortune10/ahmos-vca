@@ -118,3 +118,46 @@ each build phase follows. Kept up to date as work lands, same as the decision lo
 - Created `nurse-demo@example.com` via the real, now-working admin-authenticated API — the
   first fully real end-to-end account creation (login → admin session → API call → new
   account), not another manual bootstrap.
+
+### Backend Build — Plan 2: Episode & Task Management — ✅ Complete
+
+- `e97391f` / `b0b0f0d` — `pregnancy_episode`, `encounter_note`, `care_task` schema + RLS
+  policies, applied to the live `amhos` project.
+- `8a5eae8` — Event emitter (`episode.created` / `episode.clinical_data_updated`) + global
+  `ValidationPipe` wiring (a real gap in Plan 1: DTOs had `class-validator` decorators that
+  were never actually enforced at runtime).
+- `b944e54` — `tasks` module: ANC schedule generation, listing, completion, overdue query.
+- `d7efbc0` / `0c6855b` — `EpisodeService` (create, encounter notes, status updates,
+  caseload reads) + controller.
+- **All 6 tasks complete.** 36 unit tests + 17 e2e tests passing against the real project,
+  clean build, live smoke test verified. No deviations from the plan's interfaces — Plans
+  3, 4, 6, 7 can rely on the contract exactly as documented. Full details:
+  [execution report](docs/superpowers/executions/2026-08-01-episode-task-management-execution.md).
+
+### Full-Stack Build — Plan 8: Admin Dashboard — ✅ Complete
+
+- `378470b` — Admin role added to `ROLE_HOME_ROUTE` + `/admin` landing page.
+- `8fab99e` — `GET /api/v1/audit-events` (extends Plan 1's write-only audit module).
+- `3962bde` — `PATCH /api/v1/facilities/:id` (uses the RLS policy Plan 1 already added
+  after an earlier gap was found — zero new migrations needed for this whole plan).
+- `673cd3b` / `24e0768` / `8202775` / `ce7bdf1` — staff management, audit log, and facility
+  management admin pages, and the `GET /api/v1/users` endpoint backing the staff page.
+- **All 7 tasks complete.** 36 backend unit + 17 backend e2e + 53 frontend tests passing.
+  Full details, including one commit with a mismatched (but content-correct) message caused
+  by a concurrent-agent git issue below: [execution report](docs/superpowers/executions/2026-08-01-admin-dashboard-execution.md).
+
+### Concurrent-Agent Build: Plans 2 and 8 Ran Together
+
+Plans 2 and 8 were executed by two independent agents running **at the same time** against
+the same `backend/` git repository (Plan 8 also touches `frontend/`, which Plan 2 never
+does). This surfaced a real bug in the user's global `rtk` Claude Code hook
+(`~/.claude/settings.json`): it rewrites `git add`/`git commit` for token savings but
+doesn't reliably respect pathspec scoping under concurrent invocation, letting one
+process's staged changes ride along into another's commit. Both agents caught and worked
+around this (bypassing the hook via `/usr/bin/git` directly, verifying every commit with
+`git show --stat`) — no data was lost, but one commit (`ce7bdf1`) ended up with a message
+that doesn't match its actual content (deliberately left as-is rather than risking a
+history rewrite). Logged as a standing memory
+(`feedback-concurrent-agent-git-safety`) for future sessions. A PR (#1) was opened for this
+combined work rather than pushing straight to `main`, since this was the first time this
+session used a feature-branch workflow.
