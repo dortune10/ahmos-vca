@@ -6,15 +6,15 @@ import { CurrentUserProvider } from '@/components/current-user-provider';
 import { Nav } from '@/components/nav';
 
 // Home route for each MVP role, per docs/DECISIONS.md #20 and the design spec's Section 3
-// routing table. Plan 6 (Clinician), Plan 7 (Supervisor), and Plan 8 (Admin) each add their
-// own one-line entry here when they build their dashboard — this map is the single
-// extension point for "where does role X land after login." No `admin` entry yet by
-// design; Plan 8 adds it.
+// routing table. All five MVP roles (chw, nurse, clinician, supervisor, admin) are mapped
+// as of Plan 8 — this map is the single extension point for "where does role X land after
+// login."
 export const ROLE_HOME_ROUTE: Record<string, string> = {
   chw: '/frontline',
   nurse: '/frontline',
   clinician: '/clinician',
   supervisor: '/supervisor',
+  admin: '/admin',
 };
 
 // Pure, framework-free, and unit-tested directly (see layout.test.ts) — this is the actual
