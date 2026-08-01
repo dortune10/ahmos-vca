@@ -22,6 +22,12 @@ describe('core schema', () => {
 
   it('person table indexes phone_primary for lookup', async () => {
     const tenantId = '11111111-1111-1111-1111-111111111111';
+    // Idempotent cleanup: this suite runs against the persistent shared `amhos` project (no
+    // local/branch reset between test runs — see docs/DECISIONS.md #23), so a prior run's
+    // row with this same phone_primary would otherwise duplicate and break the `.single()`
+    // lookup below.
+    await admin.from('person').delete().eq('phone_primary', '+254700000001');
+
     const { error } = await admin
       .from('person')
       .insert({ tenant_id: tenantId, first_name: 'Amina', phone_primary: '+254700000001' });
