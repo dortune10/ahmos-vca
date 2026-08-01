@@ -27,18 +27,23 @@ Supabase mock.
 
 Same as Plan 1 (Backend Foundation) — see that plan for the full list (API base path,
 `X-Correlation-Id`, error response shape, no-ORM/RLS-as-source-of-truth, plain-SQL
-migrations via `supabase db reset`, `created_at`/`updated_at` convention). This plan adds:
+migrations applied via the Supabase MCP's `apply_migration` tool against the hosted
+`amhos` project (`wjgyivxvmqchlhgmxcxe`) — no local Docker, no CLI `db push`/`db reset`, no
+`supabase link` (`docs/DECISIONS.md` #23) — `created_at`/`updated_at` convention). This plan
+adds:
 
 - **Migration numbering.** Plan 2's last two migrations were
   `00000000000004_episode_task_schema.sql` and
   `00000000000005_episode_task_rls_policies.sql` (confirmed by reading that plan in full).
-  This plan continues the sequence at `00000000000006` and `00000000000007`. Plan 3 (Risk
-  Scoring Engine) is being authored in parallel from the same Plan 2 baseline and may
-  independently also claim `00000000000006`/`00000000000007` for its own tables — that
-  collision is expected, not a mistake by either plan's author. Whoever executes these
-  plans (in whichever order they land first) resolves it with a light renumbering pass at
-  execution time; this plan does not attempt to coordinate with Plan 3's numbering in
-  advance.
+  Plan 3 (Risk Scoring Engine) was authored in parallel from the same Plan 2 baseline and
+  independently claimed `00000000000006`/`00000000000007` for its own `risk_assessment`
+  schema/RLS migrations — that collision was expected, not a mistake by either plan's
+  author. Plan 3 is being treated as keeping those two numbers, so this plan's two
+  migrations are renumbered to `00000000000008` and `00000000000009` to resolve it: this
+  plan now effectively continues the sequence after Plan 3's `00000000000007`, not directly
+  after Plan 2's `00000000000005`. Plan 3 and this plan were both written in parallel from
+  the same baseline; this renumbering is what actually resolves the expected overlap, rather
+  than leaving it as a deferred execution-time cleanup.
 
 - **`pregnancy_episode.status` gains `Admitted` and `Cancelled`.** Plan 2 shipped only the
   approved design spec's narrower 7-value set (`Draft, Active, Referred, Delivered,
@@ -139,7 +144,7 @@ migrations via `supabase db reset`, `created_at`/`updated_at` convention). This 
 ### Task 1: Schema migration — extend `pregnancy_episode.status`, create `referral`
 
 **Files:**
-- Create: `supabase/migrations/00000000000006_referral_schema.sql`
+- Create: `supabase/migrations/00000000000008_referral_schema.sql`
 - Test: `backend/test/referral-schema.e2e-spec.ts`
 
 **Interfaces:**
@@ -156,7 +161,7 @@ migrations via `supabase db reset`, `created_at`/`updated_at` convention). This 
 
 - [ ] **Step 1: Write the migration**
 
-Create `supabase/migrations/00000000000006_referral_schema.sql`:
+Create `supabase/migrations/00000000000008_referral_schema.sql`:
 ```sql
 -- Extend pregnancy_episode.status to include Admitted and Cancelled, completing the PRD's
 -- full pregnancy-episode state diagram (docs/PRD.md Section 16: Draft -> Active -> Referred
@@ -223,8 +228,9 @@ alter table referral enable row level security;
 
 - [ ] **Step 2: Apply the migration**
 
-Run: `npx supabase db reset`
-Expected: migration applies cleanly, no errors printed.
+Call the `apply_migration` MCP tool: `project_id: "wjgyivxvmqchlhgmxcxe"`,
+`name: "referral_schema"`, `query: <the exact SQL from Step 1>`.
+Expected: applies cleanly to the `amhos` project, no errors returned.
 
 - [ ] **Step 3: Write the failing verification test**
 
@@ -370,7 +376,7 @@ Expected: PASS
 
 ```bash
 cd /Users/dot/Documents/Projects/VCA-Health
-git add supabase/migrations/00000000000006_referral_schema.sql backend/test/referral-schema.e2e-spec.ts
+git add supabase/migrations/00000000000008_referral_schema.sql backend/test/referral-schema.e2e-spec.ts
 git commit -m "feat: add referral table and extend pregnancy_episode.status with Admitted/Cancelled"
 ```
 
@@ -379,7 +385,7 @@ git commit -m "feat: add referral table and extend pregnancy_episode.status with
 ### Task 2: RLS policies for `referral`
 
 **Files:**
-- Create: `supabase/migrations/00000000000007_referral_rls_policies.sql`
+- Create: `supabase/migrations/00000000000009_referral_rls_policies.sql`
 - Test: `backend/test/referral-rls.e2e-spec.ts`
 
 **Interfaces:**
@@ -543,7 +549,7 @@ tenant-A row too, same signal Plan 1 Task 4 / Plan 2 Task 2 rely on.
 
 - [ ] **Step 3: Write the RLS policies**
 
-Create `supabase/migrations/00000000000007_referral_rls_policies.sql`:
+Create `supabase/migrations/00000000000009_referral_rls_policies.sql`:
 ```sql
 -- referral RLS is tenant-scoped via a single join through pregnancy_episode -> facility,
 -- the same pattern Plan 2 established for pregnancy_episode/encounter_note/care_task. A
@@ -600,9 +606,12 @@ create policy "referral_update_tenant" on referral
 
 - [ ] **Step 4: Apply and run test to verify it passes**
 
-Run:
+Call the `apply_migration` MCP tool: `project_id: "wjgyivxvmqchlhgmxcxe"`,
+`name: "referral_rls_policies"`, `query: <the exact SQL from Step 3>`. Then call the
+`get_advisors` MCP tool with `project_id: "wjgyivxvmqchlhgmxcxe"`, `type: "security"` and
+confirm it reports no findings for `referral` (no missing-policy findings) or for the
+`pregnancy_episode` status constraint altered in Task 1. Then run:
 ```bash
-npx supabase db reset
 cd backend && npm run test:e2e -- referral-rls.e2e-spec.ts
 ```
 Expected: PASS
@@ -611,7 +620,7 @@ Expected: PASS
 
 ```bash
 cd /Users/dot/Documents/Projects/VCA-Health
-git add supabase/migrations/00000000000007_referral_rls_policies.sql backend/test/referral-rls.e2e-spec.ts
+git add supabase/migrations/00000000000009_referral_rls_policies.sql backend/test/referral-rls.e2e-spec.ts
 git commit -m "feat: add tenant-isolation RLS policies for referral"
 ```
 

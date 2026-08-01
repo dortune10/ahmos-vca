@@ -39,17 +39,19 @@ no new tables:
   to list existing staff. This plan adds `UsersService.list()` + a `GET` route to the
   existing `UsersController`.
 
-While implementing the `PATCH /api/v1/facilities/:id` endpoint, this plan found and fixes a
-real gap in Plan 1's own RLS migration (`supabase/migrations/00000000000002_core_rls_policies.sql`):
-it defines a `select` policy for `facility` but **no `insert` or `update` policy at all**.
-That means Plan 1's own `FacilityService.create()` (Task 8) cannot actually succeed against
-a real RLS-enabled Postgres database, even though it passes Plan 1's unit test (mocked
-Supabase client) and its e2e test (which only asserts a 401 for missing auth, never
-exercises a real authenticated write). This plan adds one new migration
-(`00000000000004_facility_admin_write_policies.sql`) with both the missing `insert` policy
-(retroactively fixing Plan 1's create endpoint) and the new `update` policy this plan's
-`PATCH` endpoint requires — see Global Constraints for why this is one migration, not two
-separate concerns punted to different plans.
+While implementing the `PATCH /api/v1/facilities/:id` endpoint, this plan originally found a
+real gap in Plan 1's RLS migration (`supabase/migrations/00000000000002_core_rls_policies.sql`):
+it defined a `select` policy for `facility` but **no `insert` or `update` policy at all**,
+which meant Plan 1's own `FacilityService.create()` (Task 8) could not actually succeed
+against a real RLS-enabled Postgres database, even though it passed Plan 1's unit test
+(mocked Supabase client) and its e2e test (which only asserts a 401 for missing auth, never
+exercises a real authenticated write). **That gap has since been fixed directly at the
+source**: Plan 1's Task 4 now adds both `facility_insert_admin_only` and
+`facility_update_admin_only` policies as part of its own
+`00000000000002_core_rls_policies.sql` migration (see
+`docs/superpowers/plans/2026-08-01-backend-foundation.md`, Task 4). This plan therefore adds
+no migration of its own — `FacilityService.update()` (Task 3) relies entirely on the
+`facility_update_admin_only` policy Plan 1 already provides.
 
 *Frontend* — four new pages under `frontend/app/(dashboards)/admin/` (`page.tsx` landing
 screen, `facilities/page.tsx`, `staff/page.tsx`, `audit/page.tsx`), plus the one-line
@@ -61,7 +63,8 @@ components that call `apiFetch<T>()` against the NestJS backend, no direct
 config) — only new route-segment pages and their tests.
 
 **Tech Stack:** Backend: same as Plan 1 — Node.js 20 LTS, NestJS 10.x, TypeScript 5.x,
-`@supabase/supabase-js` v2, Jest + Supertest, Supabase CLI for local Postgres + migrations.
+`@supabase/supabase-js` v2, Jest + Supertest, Supabase CLI for linking/migrations against the
+hosted project.
 Frontend: Next.js 14+ (App Router), TypeScript, React 18, Tailwind CSS, Jest + React Testing
 Library via the `next/jest` preset Plan 5 configures.
 
@@ -78,15 +81,19 @@ Library via the `next/jest` preset Plan 5 configures.
   never `getServiceClient()`, for exactly the same reason Plan 1's `FacilityService` and
   `IdentityService` do: these are user-initiated reads/writes that RLS should scope, not
   system-triggered writes.
-- Migrations are plain SQL files in `supabase/migrations/`, applied via
-  `npx supabase db reset` locally, never hand-edited outside a migration file.
-- **This plan adds exactly one new migration**,
-  `supabase/migrations/00000000000004_facility_admin_write_policies.sql`, numbered
-  sequentially after Plan 1's `00000000000001`–`00000000000003`. No other task in this plan
-  needs a schema or RLS change — the audit-events and users-list endpoints are pure reads
-  layered on tables and policies Plan 1 already created correctly.
-- Local dev/test requires `supabase start` running before any test touching the database.
-  Tests run against the local instance only.
+- Migrations are plain SQL files in `supabase/migrations/`, applied via the Supabase MCP's
+  `apply_migration` tool against the real hosted project (`wjgyivxvmqchlhgmxcxe`) — never via
+  local Docker, `supabase start`, `db reset`, or `link` (see `docs/DECISIONS.md` #23 and Plan
+  1's Global Constraints for why: Docker isn't available in this environment, and running
+  directly against the hosted project is safe only while it holds zero real patient/staff
+  data). Never hand-edit the database outside a migration file.
+- **This plan adds zero new migrations.** All three new endpoints (`GET /api/v1/audit-events`,
+  `PATCH /api/v1/facilities/:id`, `GET /api/v1/users`) are pure reads/writes layered on
+  tables and RLS policies Plan 1 already establishes correctly — including the `facility`
+  insert/update policies (`facility_insert_admin_only`, `facility_update_admin_only`) that
+  Plan 1's Task 4 now provides directly in `00000000000002_core_rls_policies.sql`.
+- Tests run against the real hosted Supabase project directly, per Plan 1's Global
+  Constraints — there is no local Postgres instance and no `supabase start` step.
 
 **Frontend (fixed contract shared with Plan 5 — both plans build against this, do not
 deviate):**
@@ -570,7 +577,6 @@ git commit -m "feat: add admin-only GET /api/v1/audit-events endpoint"
 ### Task 3: `PATCH /api/v1/facilities/:id` — facility update endpoint
 
 **Files:**
-- Create: `supabase/migrations/00000000000004_facility_admin_write_policies.sql`
 - Create: `backend/src/facility/dto/update-facility.dto.ts`
 - Modify: `backend/src/facility/facility.service.ts`
 - Modify: `backend/src/facility/facility.controller.ts`
@@ -579,56 +585,37 @@ git commit -m "feat: add admin-only GET /api/v1/audit-events endpoint"
 
 **Interfaces:**
 - Consumes: `SupabaseService.getClientForUser`, `AuditService.log()`, `AuthGuard`/
-  `RolesGuard`/`@Roles`/`@CurrentUser` (all Plan 1), `FacilityResponseDto` (Plan 1 Task 8).
+  `RolesGuard`/`@Roles`/`@CurrentUser` (all Plan 1), `FacilityResponseDto` (Plan 1 Task 8),
+  the existing `facility_update_admin_only` RLS policy on `facility` (Plan 1 Task 4) — no new
+  policy needed, this task's `update()` relies entirely on it.
 - Produces:
   - `FacilityService.update(jwt: string, actorUserId: string, tenantId: string, id: string, dto: UpdateFacilityDto): Promise<FacilityResponseDto>`
   - `PATCH /api/v1/facilities/:id` (roles: `admin`)
   - `UpdateFacilityDto { name?: string; type?: 'community'|'clinic'|'hospital'; contactPhone?: string; acceptingReferrals?: boolean; }`
-  - New RLS policies `facility_admin_insert` and `facility_admin_update` on `facility` —
-    see this task's Step 1 for why the insert policy is included here even though insert
-    itself was Plan 1's endpoint, not this plan's.
 
-- [ ] **Step 1: Write the missing facility write-policy migration**
-
-Plan 1's RLS migration (`supabase/migrations/00000000000002_core_rls_policies.sql`) gives
-`facility` a `select` policy only:
+**How the RLS gap behind this endpoint was found (already fixed in Plan 1, not by this
+task):** while scoping this endpoint, an earlier pass over this plan noticed that Plan 1's
+RLS migration (`supabase/migrations/00000000000002_core_rls_policies.sql`) gave `facility`
+only a `select` policy:
 
 ```sql
 create policy "facility_tenant_isolation" on facility
   for select using (tenant_id = (select tenant_id from auth_app_user()));
 ```
 
-There is no `insert` or `update` policy on `facility` anywhere in Plan 1. With RLS enabled
-and no matching policy, Postgres denies the operation by default — meaning Plan 1's own
-`FacilityService.create()` (which calls `.insert()` via `getClientForUser(jwt)`, not the
-service-role client) cannot succeed against a real database, and this task's new
-`FacilityService.update()` (`.update()` via the same user-scoped client) cannot either. Add
-both policies together since they're the same root cause and the same table:
+With no `insert` or `update` policy on `facility`, RLS would deny both operations by
+default — meaning Plan 1's own `FacilityService.create()` (which calls `.insert()` via
+`getClientForUser(jwt)`, not the service-role client) could not succeed against a real
+database, and this task's `FacilityService.update()` (`.update()` via the same user-scoped
+client) could not either, despite both passing their own mocked-client unit tests. **That gap
+is now fixed directly in Plan 1**: Task 4 of
+`docs/superpowers/plans/2026-08-01-backend-foundation.md` adds both `facility_insert_admin_only`
+and `facility_update_admin_only` policies to `00000000000002_core_rls_policies.sql`. This task
+therefore does not create or apply any migration — it implements `FacilityService.update()`
+and the `PATCH` route directly against the `facility_update_admin_only` policy Plan 1 already
+provides.
 
-Create `supabase/migrations/00000000000004_facility_admin_write_policies.sql`:
-
-```sql
-create policy "facility_admin_insert" on facility
-  for insert with check (
-    tenant_id = (select tenant_id from auth_app_user())
-    and (select role from auth_app_user()) = 'admin'
-  );
-
-create policy "facility_admin_update" on facility
-  for update using (
-    tenant_id = (select tenant_id from auth_app_user())
-    and (select role from auth_app_user()) = 'admin'
-  ) with check (
-    tenant_id = (select tenant_id from auth_app_user())
-  );
-```
-
-- [ ] **Step 2: Apply the migration**
-
-Run: `npx supabase db reset`
-Expected: migration applies cleanly, no errors printed.
-
-- [ ] **Step 3: Write the failing service test**
+- [ ] **Step 1: Write the failing service test**
 
 Add the following `describe('update', ...)` block to the end of
 `backend/src/facility/facility.service.spec.ts` (append after the existing
@@ -727,12 +714,12 @@ Make sure the top of `backend/src/facility/facility.service.spec.ts` still impor
 `AuditService` from `'../audit/audit.service'` alongside the existing imports (Plan 1's
 original file already imports it for the `create` tests).
 
-- [ ] **Step 4: Run test to verify it fails**
+- [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && npm test -- facility.service.spec.ts`
 Expected: FAIL — `service.update is not a function`
 
-- [ ] **Step 5: Implement `UpdateFacilityDto` and `FacilityService.update`**
+- [ ] **Step 3: Implement `UpdateFacilityDto` and `FacilityService.update`**
 
 Create `backend/src/facility/dto/update-facility.dto.ts`:
 
@@ -806,12 +793,12 @@ import { UpdateFacilityDto } from './dto/update-facility.dto';
   }
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && npm test -- facility.service.spec.ts`
 Expected: PASS
 
-- [ ] **Step 7: Add the `PATCH` route**
+- [ ] **Step 5: Add the `PATCH` route**
 
 In `backend/src/facility/facility.controller.ts`, add `Patch` and `Param` to the
 `@nestjs/common` import, add the `UpdateFacilityDto` import, and add this method to the
@@ -835,7 +822,7 @@ import { UpdateFacilityDto } from './dto/update-facility.dto';
   }
 ```
 
-- [ ] **Step 8: Add an e2e test for the new route**
+- [ ] **Step 6: Add an e2e test for the new route**
 
 Add this test to `backend/test/facility.e2e-spec.ts`, inside the existing
 `describe('FacilityController (e2e)', ...)` block, after the existing
@@ -850,17 +837,17 @@ Add this test to `backend/test/facility.e2e-spec.ts`, inside the existing
   });
 ```
 
-- [ ] **Step 9: Run the e2e test to verify it passes**
+- [ ] **Step 7: Run the e2e test to verify it passes**
 
 Run: `cd backend && npm run test:e2e -- facility.e2e-spec.ts`
 Expected: PASS
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 cd /Users/dot/Documents/Projects/VCA-Health
-git add supabase/migrations/00000000000004_facility_admin_write_policies.sql backend/src/facility/ backend/test/facility.e2e-spec.ts
-git commit -m "feat: add facility update endpoint and missing admin write RLS policies"
+git add backend/src/facility/ backend/test/facility.e2e-spec.ts
+git commit -m "feat: add facility update endpoint (uses Plan 1's facility_update_admin_only RLS policy)"
 ```
 
 ---
@@ -1935,5 +1922,9 @@ states.
 2. `PATCH /api/v1/facilities/:id` (roles: `admin`) — Task 3.
 3. `GET /api/v1/users` (roles: `admin`) — Task 4.
 
-Plus one new migration, `00000000000004_facility_admin_write_policies.sql` (Task 3), fixing
-Plan 1's missing `facility` insert/update RLS policies.
+**This plan adds zero new migrations.** Task 3 originally surfaced a gap in Plan 1's RLS
+migration (`facility` had no `insert`/`update` policy), but that gap is now fixed directly in
+Plan 1 (Task 4 of `docs/superpowers/plans/2026-08-01-backend-foundation.md` adds
+`facility_insert_admin_only` and `facility_update_admin_only` to its own
+`00000000000002_core_rls_policies.sql`). All three endpoints above are pure reads/writes
+against tables and RLS policies Plan 1 already establishes correctly.

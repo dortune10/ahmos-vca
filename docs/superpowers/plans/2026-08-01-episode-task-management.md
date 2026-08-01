@@ -29,9 +29,12 @@ plan introduces: `@nestjs/event-emitter` (episode lifecycle events for Plan 3) a
 
 ## Global Constraints
 
-Same as Plan 1 (Backend Foundation) — see that plan for the full list (API base path,
-`X-Correlation-Id`, error response shape, no-ORM/RLS-as-source-of-truth, plain-SQL
-migrations via `supabase db reset`, `created_at`/`updated_at` convention). This plan adds:
+Same as Plan 1 (Backend Foundation) — see that plan for the full list, **including the
+database approach**: one hosted Supabase project (`amhos`, `wjgyivxvmqchlhgmxcxe`), no local
+Docker stack, no `supabase start`/`db reset`/`link`; every migration in this plan is applied
+via the Supabase MCP's `apply_migration` tool exactly as Plan 1's Global Constraints
+describe (API base path, `X-Correlation-Id`, error response shape,
+no-ORM/RLS-as-source-of-truth, `created_at`/`updated_at` convention). This plan adds:
 
 - **Global `ValidationPipe` gap fix.** Plan 1 decorated its DTOs with `class-validator`
   decorators (`@IsString`, `@IsIn`, etc.) but never called
@@ -54,14 +57,21 @@ migrations via `supabase db reset`, `created_at`/`updated_at` convention). This 
   editing a constraint expression, not just a DTO field) and (b) the API is the only write
   path into this table (no service-role bypass writes this table), so application-level
   validation is not a security gap — it just needs a pipe wired up, which is the fix above.
-- **`pregnancy_episode.status` value set.** This plan uses exactly the seven values the
-  approved design spec's Data Model table (Section 4) lists: `Draft`, `Active`, `Referred`,
-  `Delivered`, `PostnatalActive`, `Closed`, `Archived`. Note for whoever plans Referral
-  (Plan 4): the PRD's own state diagram (`docs/PRD.md` Section 16) additionally shows
-  `Admitted` (between `Referred` and `Delivered`) and `Cancelled` (from `Active`), which the
-  approved spec's table does not carry forward. This plan follows the approved spec exactly
-  rather than silently adding two more enum values on its own authority — if Plan 4 needs
-  `Admitted` as a distinct state, that's a schema decision for that plan to make explicitly.
+- **`pregnancy_episode.status` value set.** This plan's own schema (Task 1's `CREATE TABLE`
+  CHECK constraint) uses exactly the seven values the approved design spec's Data Model
+  table (Section 4) lists: `Draft`, `Active`, `Referred`, `Delivered`, `PostnatalActive`,
+  `Closed`, `Archived`. Note for whoever plans Referral (Plan 4): the PRD's own state diagram
+  (`docs/PRD.md` Section 16) additionally shows `Admitted` (between `Referred` and
+  `Delivered`) and `Cancelled` (from `Active`), which the approved spec's table does not
+  carry forward. This plan follows the approved spec exactly rather than silently adding two
+  more enum values on its own authority — if Plan 4 needs `Admitted` as a distinct state,
+  that's a schema decision for that plan to make explicitly. (Plan 4 did in fact need both,
+  and extends this CHECK constraint via its own `ALTER TABLE` migration after this plan's
+  `CREATE TABLE` has already run — see that plan's Task 1. That is a database-schema
+  decision only; at the application layer, this plan's own `UpdateEpisodeStatusDto` — Task 5,
+  Step 1 — separately allow-lists all nine values up front, since it's harmless for the DTO
+  to accept two values the database doesn't yet permit, but see the note beside that DTO for
+  the execution-order caveat this implies.)
 - **RLS join strategy for `pregnancy_episode`, `encounter_note`, `care_task`.** None of
   these three tables carries a `tenant_id` column (per the approved spec's Data Model — only
   `facility_id`/`person_id`/`pregnancy_episode_id` foreign keys). Tenant scope is derived via
@@ -159,8 +169,9 @@ alter table care_task enable row level security;
 
 - [ ] **Step 2: Apply the migration**
 
-Run: `npx supabase db reset`
-Expected: migration applies cleanly, no errors printed.
+Call the `apply_migration` MCP tool: `project_id: "wjgyivxvmqchlhgmxcxe"`,
+`name: "episode_task_schema"`, `query: <the exact SQL from Step 1>`.
+Expected: applies cleanly to the `amhos` project, no errors returned.
 
 - [ ] **Step 3: Write the failing verification test**
 
@@ -507,9 +518,12 @@ create policy "care_task_update_tenant" on care_task
 
 - [ ] **Step 4: Apply and run test to verify it passes**
 
-Run:
+Call the `apply_migration` MCP tool: `project_id: "wjgyivxvmqchlhgmxcxe"`,
+`name: "episode_task_rls_policies"`, `query: <the exact SQL from Step 3>`. Then call the
+`get_advisors` MCP tool with `project_id: "wjgyivxvmqchlhgmxcxe"`, `type: "security"` and
+confirm it reports no missing-policy findings for `pregnancy_episode`, `encounter_note`, or
+`care_task`. Then run:
 ```bash
-npx supabase db reset
 cd backend && npm run test:e2e -- episode-task-rls.e2e-spec.ts
 ```
 Expected: PASS
@@ -1226,9 +1240,34 @@ Create `backend/src/episode/dto/update-episode-status.dto.ts`:
 ```typescript
 import { IsIn } from 'class-validator';
 
+// Allow-list includes 'Admitted' and 'Cancelled' even though this plan's own migration
+// (Task 1) only adds the other seven values to the `pregnancy_episode.status` CHECK
+// constraint. Plan 4 (Referral Lifecycle) extends that constraint via its own
+// `ALTER TABLE` migration to add exactly these two values, because the referral state
+// machine drives an episode to `Admitted` (referral arrived) and back to `Active` (referral
+// failed/cancelled) — but Plan 4's `ReferralService` does that via a direct call to
+// `EpisodeService.updateStatus()`, bypassing this DTO entirely (this DTO only guards the
+// `PATCH /api/v1/pregnancy-episodes/:id/status` HTTP body). Without this allow-list
+// extension, that HTTP endpoint itself would reject `Admitted`/`Cancelled` even after Plan
+// 4's migration has run — exactly the "known cross-plan follow-up" Plan 4's own Global
+// Constraints section flags as not fixed there. This fixes it here instead, so a
+// clinician/nurse can also set those two states by hand through the endpoint, not only via
+// the referral state machine. Execution order matters: run this plan (Plan 2) first, then
+// Plan 4. Until Plan 4's migration has actually run, a PATCH with `status: "Admitted"` or
+// `"Cancelled"` will pass this DTO's validation but still be rejected by the database's
+// CHECK constraint — that is expected and fine, not a bug to work around here.
 export class UpdateEpisodeStatusDto {
-  @IsIn(['Draft', 'Active', 'Referred', 'Delivered', 'PostnatalActive', 'Closed', 'Archived'])
-  status!: 'Draft' | 'Active' | 'Referred' | 'Delivered' | 'PostnatalActive' | 'Closed' | 'Archived';
+  @IsIn(['Draft', 'Active', 'Referred', 'Admitted', 'Delivered', 'PostnatalActive', 'Closed', 'Archived', 'Cancelled'])
+  status!:
+    | 'Draft'
+    | 'Active'
+    | 'Referred'
+    | 'Admitted'
+    | 'Delivered'
+    | 'PostnatalActive'
+    | 'Closed'
+    | 'Archived'
+    | 'Cancelled';
 }
 ```
 
@@ -2221,7 +2260,7 @@ its rules engine — Plan 2 does not call into Plan 3 in either direction, only 
 - `VitalsDto { bpSystolic?: number; bpDiastolic?: number; temperatureC?: number; hemoglobinGdl?: number }`
 - `RecordEncounterNoteDto { noteText?: string; vitals?: VitalsDto }`
 - `EncounterNoteResponseDto { id, pregnancyEpisodeId, recordedBy, recordedAt, noteText, vitals, createdAt }` with `static fromRow(row): EncounterNoteResponseDto`
-- `UpdateEpisodeStatusDto { status: 'Draft' | 'Active' | 'Referred' | 'Delivered' | 'PostnatalActive' | 'Closed' | 'Archived' }`
+- `UpdateEpisodeStatusDto { status: 'Draft' | 'Active' | 'Referred' | 'Admitted' | 'Delivered' | 'PostnatalActive' | 'Closed' | 'Archived' | 'Cancelled' }` — the DTO allow-list already includes `Admitted`/`Cancelled` in anticipation of Plan 4's `ALTER TABLE` migration (see the note beside the DTO definition in Task 5, Step 1); this plan's own schema (below) still only has the original seven values until Plan 4 runs.
 - `CareTaskResponseDto { id, pregnancyEpisodeId, taskType, assignedUserId, dueAt, completedAt, status, priority, createdAt, updatedAt }` with `static fromRow(row): CareTaskResponseDto`
 
 ### REST endpoints

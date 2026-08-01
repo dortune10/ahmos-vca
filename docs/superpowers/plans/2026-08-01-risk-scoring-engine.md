@@ -38,12 +38,12 @@ advisory score).
 
 ## Global Constraints
 
-Same as Plan 1 (Backend Foundation) — see that plan for the full list (API base path,
-`X-Correlation-Id`, error response shape, no-ORM/RLS-as-source-of-truth, plain-SQL
-migrations via `supabase db reset`, `created_at`/`updated_at` convention, the local-vs-cloud
-Supabase project split) — and Plan 2 (Episode & Task Management) for the RLS join pattern
-via `facility_id`/`pregnancy_episode_id` and the tenant-only (not facility-level) RLS
-granularity precedent. This plan adds:
+Same as Plan 1 (Backend Foundation) — see that plan's Global Constraints for the full list
+(API base path, `X-Correlation-Id`, error response shape, no-ORM/RLS-as-source-of-truth,
+`created_at`/`updated_at` convention, and the database/migration approach — same as Plan 1,
+see that plan's Global Constraints) — and Plan 2 (Episode & Task Management) for the RLS
+join pattern via `facility_id`/`pregnancy_episode_id` and the tenant-only (not
+facility-level) RLS granularity precedent. This plan adds:
 
 - **Migration numbering.** Plan 2's Task 2 confirms its last two migrations were
   `00000000000004_episode_task_schema.sql` and
@@ -201,8 +201,9 @@ alter table risk_assessment enable row level security;
 
 - [ ] **Step 2: Apply the migration**
 
-Run: `npx supabase db reset`
-Expected: migration applies cleanly, no errors printed.
+Call the `apply_migration` MCP tool: `project_id: "wjgyivxvmqchlhgmxcxe"`,
+`name: "risk_assessment_schema"`, `query: <the exact SQL from Step 1>`.
+Expected: applies cleanly to the `amhos` project, no errors returned.
 
 - [ ] **Step 3: Write the failing verification test**
 
@@ -526,9 +527,11 @@ create policy "risk_assessment_update_tenant" on risk_assessment
 
 - [ ] **Step 4: Apply and run test to verify it passes**
 
-Run:
+Call the `apply_migration` MCP tool: `project_id: "wjgyivxvmqchlhgmxcxe"`,
+`name: "risk_assessment_rls_policies"`, `query: <the exact SQL from Step 3>`. Then call the
+`get_advisors` MCP tool with `project_id: "wjgyivxvmqchlhgmxcxe"`, `type: "security"` and
+confirm it reports no missing-policy findings for `risk_assessment`. Then run:
 ```bash
-npx supabase db reset
 cd backend && npm run test:e2e -- risk-assessment-rls.e2e-spec.ts
 ```
 Expected: PASS — all three tests green.
