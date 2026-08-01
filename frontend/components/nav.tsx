@@ -1,5 +1,10 @@
+'use client';
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { AppUser } from '@/lib/current-user';
+import { createClient } from '@/lib/supabase/client';
+import { Button } from '@/components/ui/button';
 
 const NAV_LINKS_BY_ROLE: Record<string, { href: string; label: string }[]> = {
   chw: [
@@ -16,7 +21,18 @@ const NAV_LINKS_BY_ROLE: Record<string, { href: string; label: string }[]> = {
 };
 
 export function Nav({ user }: { user: AppUser }) {
+  const router = useRouter();
   const links = NAV_LINKS_BY_ROLE[user.role] ?? [];
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    // Same router.push + router.refresh pairing the login page uses to sign in — needed
+    // here too so the root layout's Server Component re-reads the now-cleared session
+    // cookie instead of serving a cached RSC payload from while still signed in.
+    router.push('/login');
+    router.refresh();
+  }
 
   return (
     <nav className="flex items-center justify-between border-b bg-white px-4 py-3">
@@ -31,9 +47,14 @@ export function Nav({ user }: { user: AppUser }) {
           </Link>
         ))}
       </div>
-      <span className="text-sm text-gray-500">
-        {user.fullName} ({user.role})
-      </span>
+      <div className="flex items-center gap-4">
+        <span className="text-sm text-gray-500">
+          {user.fullName} ({user.role})
+        </span>
+        <Button type="button" variant="secondary" onClick={handleSignOut}>
+          Sign out
+        </Button>
+      </div>
     </nav>
   );
 }

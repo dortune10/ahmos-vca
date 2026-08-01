@@ -118,3 +118,111 @@ each build phase follows. Kept up to date as work lands, same as the decision lo
 - Created `nurse-demo@example.com` via the real, now-working admin-authenticated API — the
   first fully real end-to-end account creation (login → admin session → API call → new
   account), not another manual bootstrap.
+
+### Backend Build — Plan 2: Episode & Task Management — ✅ Complete
+
+- `e97391f` / `b0b0f0d` — `pregnancy_episode`, `encounter_note`, `care_task` schema + RLS
+  policies, applied to the live `amhos` project.
+- `8a5eae8` — Event emitter (`episode.created` / `episode.clinical_data_updated`) + global
+  `ValidationPipe` wiring (a real gap in Plan 1: DTOs had `class-validator` decorators that
+  were never actually enforced at runtime).
+- `b944e54` — `tasks` module: ANC schedule generation, listing, completion, overdue query.
+- `d7efbc0` / `0c6855b` — `EpisodeService` (create, encounter notes, status updates,
+  caseload reads) + controller.
+- **All 6 tasks complete.** 36 unit tests + 17 e2e tests passing against the real project,
+  clean build, live smoke test verified. No deviations from the plan's interfaces — Plans
+  3, 4, 6, 7 can rely on the contract exactly as documented. Full details:
+  [execution report](docs/superpowers/executions/2026-08-01-episode-task-management-execution.md).
+
+### Backend Build — Plan 3: Risk Scoring Engine — ✅ Complete
+
+- `4fbe605` / `e7e82e0` — `risk_assessment` schema + tenant-isolation RLS policies, applied
+  to the live `amhos` project (scoped via `private.auth_app_user()` + a join through
+  `pregnancy_episode`, matching Plans 1/2).
+- `0f0ca9d` — Deterministic rules engine (`RiskRulesEngineService`). Thresholds are real
+  obstetric reference ranges but **provisional / not clinically signed off** — that framing
+  lives in the code (a header comment block), not just the plan, per user requirement.
+- `b4840cf` — Claude API ML-assisted advisory tier (`RiskMlService`) with rule-only fallback.
+  Found and fixed a real `TS2769` build bug invisible to Jest: `@anthropic-ai/sdk`'s
+  `Tool.input_schema.required` is a mutable `string[]`, so the plan's `as const` tool
+  definition didn't type-check — only `tsc` caught it.
+- `a1c5edd` — `RiskService` pipeline (rules → optional ML → persist) + `@OnEvent` listeners
+  that auto-score on `episode.created` / `episode.clinical_data_updated`.
+- `b77b9c5` / `a31f23e` — Override + read methods, both controllers, `RiskModule` wired in.
+- **All 7 tasks complete.** Independently re-verified from a clean tree: 78 unit + 28 e2e
+  tests passing against the live project, clean build, no new security-advisor findings on
+  `risk_assessment`. Executed **solo** (not in parallel) after the earlier concurrent-git
+  lesson. **Caveat:** no real `ANTHROPIC_API_KEY` was available, so the ML tier has only run
+  against a mocked client — every real call currently hits the rule-only fallback until a key
+  is supplied. Full details:
+  [execution report](docs/superpowers/executions/2026-08-01-risk-scoring-engine-execution.md).
+
+### Backend Build — Plan 4: Referral Lifecycle — ✅ Complete
+
+- `dcba203` — `referral` schema migration + widened `pregnancy_episode.status` `CHECK`
+  constraint to add `Admitted`/`Cancelled`, applied to the live `amhos` project (migration
+  `00000000000008`).
+- `c30e106` — Tenant-isolation RLS policies for `referral` (select/insert/update, no delete),
+  applied to the live project (migration `00000000000009`).
+- `b066f5c` — Strict referral state machine (`referral-state-machine.ts`): 9-value
+  `ReferralStatus` union, `REFERRAL_STATUS_TRANSITIONS` graph, `InvalidReferralStateError`.
+- `4db5dd5` — `ReferralService`: create (facility-accepting check, episode side effect to
+  `Referred`), status transitions (milestone timestamps, `Arrived→Admitted` /
+  `Failed|Cancelled→Active` episode side effects), reads.
+- `5d7ac53` — `ReferralController` + `ReferralModule` wired into `AppModule`.
+- **All 5 tasks complete.** Independently re-verified: 114 unit + 38 e2e tests passing against
+  the live project, clean build, no new security-advisor findings on `referral`, all 5 commits
+  cleanly scoped. **Honest note:** the interface-deviation review found the documented
+  contract (every method/DTO/error/route Plan 6 and 7 depend on) matches with zero deviation,
+  but flagged three purely cosmetic differences from the plan's literal code text (an
+  `import type` fix required by this repo's `tsconfig.json`, one comment reword, one
+  default-vs-namespace import in a test file) — none affect behavior or the contract. Full
+  details:
+  [execution report](docs/superpowers/executions/2026-08-01-referral-lifecycle-execution.md).
+
+### Full-Stack Build — Plan 8: Admin Dashboard — ✅ Complete
+
+- `378470b` — Admin role added to `ROLE_HOME_ROUTE` + `/admin` landing page.
+- `8fab99e` — `GET /api/v1/audit-events` (extends Plan 1's write-only audit module).
+- `3962bde` — `PATCH /api/v1/facilities/:id` (uses the RLS policy Plan 1 already added
+  after an earlier gap was found — zero new migrations needed for this whole plan).
+- `673cd3b` / `24e0768` / `8202775` / `ce7bdf1` — staff management, audit log, and facility
+  management admin pages, and the `GET /api/v1/users` endpoint backing the staff page.
+- **All 7 tasks complete.** 36 backend unit + 17 backend e2e + 53 frontend tests passing.
+  Full details, including one commit with a mismatched (but content-correct) message caused
+  by a concurrent-agent git issue below: [execution report](docs/superpowers/executions/2026-08-01-admin-dashboard-execution.md).
+
+### Post-Launch Fixes: Sign-Out and Input Contrast
+
+- Added a working "Sign out" button to `frontend/components/nav.tsx` (previously missing
+  entirely — a real gap the user found while using the live app). Calls
+  `supabase.auth.signOut()`, then `router.push('/login')` + `router.refresh()` so the root
+  layout re-reads the now-cleared session cookie. Verified live end-to-end (login → sign out
+  → redirected to `/login`); 3/3 `nav.test.tsx` tests passing, 54/54 frontend suite passing.
+- Fixed a real contrast bug: user reported typed text in login/form inputs was "very faint,"
+  nearly invisible. Root cause was `app/globals.css`'s `prefers-color-scheme: dark` media
+  query setting `body { color: var(--foreground) }` to near-white (`#ededed`), which every
+  `<input>` inherited — but the shared `Input` component (`frontend/components/ui/input.tsx`)
+  never set its own text/background color, so on a browser/OS in dark mode the input kept its
+  native light background while the typed text rendered near-white-on-white. Fixed by giving
+  `Input` an explicit `bg-white text-gray-900` (plus `placeholder:text-gray-400`), independent
+  of system theme. Verified live with the browser's `prefers-color-scheme` forced to dark:
+  confirmed via computed styles (`color: rgb(17, 24, 39)` on `background: rgb(255, 255, 255)`)
+  before/after. Every text input in the app goes through this one shared component, so this
+  was a single-source fix.
+
+### Concurrent-Agent Build: Plans 2 and 8 Ran Together
+
+Plans 2 and 8 were executed by two independent agents running **at the same time** against
+the same `backend/` git repository (Plan 8 also touches `frontend/`, which Plan 2 never
+does). This surfaced a real bug in the user's global `rtk` Claude Code hook
+(`~/.claude/settings.json`): it rewrites `git add`/`git commit` for token savings but
+doesn't reliably respect pathspec scoping under concurrent invocation, letting one
+process's staged changes ride along into another's commit. Both agents caught and worked
+around this (bypassing the hook via `/usr/bin/git` directly, verifying every commit with
+`git show --stat`) — no data was lost, but one commit (`ce7bdf1`) ended up with a message
+that doesn't match its actual content (deliberately left as-is rather than risking a
+history rewrite). Logged as a standing memory
+(`feedback-concurrent-agent-git-safety`) for future sessions. A PR (#1) was opened for this
+combined work rather than pushing straight to `main`, since this was the first time this
+session used a feature-branch workflow.
