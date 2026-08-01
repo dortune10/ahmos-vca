@@ -146,6 +146,25 @@ each build phase follows. Kept up to date as work lands, same as the decision lo
   Full details, including one commit with a mismatched (but content-correct) message caused
   by a concurrent-agent git issue below: [execution report](docs/superpowers/executions/2026-08-01-admin-dashboard-execution.md).
 
+### Post-Launch Fixes: Sign-Out and Input Contrast
+
+- Added a working "Sign out" button to `frontend/components/nav.tsx` (previously missing
+  entirely — a real gap the user found while using the live app). Calls
+  `supabase.auth.signOut()`, then `router.push('/login')` + `router.refresh()` so the root
+  layout re-reads the now-cleared session cookie. Verified live end-to-end (login → sign out
+  → redirected to `/login`); 3/3 `nav.test.tsx` tests passing, 54/54 frontend suite passing.
+- Fixed a real contrast bug: user reported typed text in login/form inputs was "very faint,"
+  nearly invisible. Root cause was `app/globals.css`'s `prefers-color-scheme: dark` media
+  query setting `body { color: var(--foreground) }` to near-white (`#ededed`), which every
+  `<input>` inherited — but the shared `Input` component (`frontend/components/ui/input.tsx`)
+  never set its own text/background color, so on a browser/OS in dark mode the input kept its
+  native light background while the typed text rendered near-white-on-white. Fixed by giving
+  `Input` an explicit `bg-white text-gray-900` (plus `placeholder:text-gray-400`), independent
+  of system theme. Verified live with the browser's `prefers-color-scheme` forced to dark:
+  confirmed via computed styles (`color: rgb(17, 24, 39)` on `background: rgb(255, 255, 255)`)
+  before/after. Every text input in the app goes through this one shared component, so this
+  was a single-source fix.
+
 ### Concurrent-Agent Build: Plans 2 and 8 Ran Together
 
 Plans 2 and 8 were executed by two independent agents running **at the same time** against
