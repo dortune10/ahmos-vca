@@ -25,4 +25,11 @@ describe('FacilityController (e2e)', () => {
       .send({ name: 'Test', type: 'clinic' })
       .expect(401);
   });
+
+  it('rejects facility update with no auth token', () => {
+    return request(app.getHttpServer())
+      .patch('/api/v1/facilities/11111111-1111-1111-1111-111111111111')
+      .send({ acceptingReferrals: true })
+      .expect(401);
+  });
 });
