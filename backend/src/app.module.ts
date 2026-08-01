@@ -10,6 +10,7 @@ import { IdentityModule } from './identity/identity.module';
 import { UsersModule } from './users/users.module';
 import { TasksModule } from './tasks/tasks.module';
 import { EpisodeModule } from './episode/episode.module';
+import { RiskModule } from './risk/risk.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { EpisodeModule } from './episode/episode.module';
     UsersModule,
     TasksModule,
     EpisodeModule,
+    RiskModule,
   ],
   controllers: [AppController],
   providers: [AppService],
