@@ -9,6 +9,7 @@ import { FacilityModule } from './facility/facility.module';
 import { IdentityModule } from './identity/identity.module';
 import { UsersModule } from './users/users.module';
 import { TasksModule } from './tasks/tasks.module';
+import { EpisodeModule } from './episode/episode.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { TasksModule } from './tasks/tasks.module';
     IdentityModule,
     UsersModule,
     TasksModule,
+    EpisodeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
