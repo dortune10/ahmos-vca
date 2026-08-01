@@ -8,6 +8,7 @@ import { AuditModule } from './audit/audit.module';
 import { FacilityModule } from './facility/facility.module';
 import { IdentityModule } from './identity/identity.module';
 import { UsersModule } from './users/users.module';
+import { TasksModule } from './tasks/tasks.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { UsersModule } from './users/users.module';
     FacilityModule,
     IdentityModule,
     UsersModule,
+    TasksModule,
   ],
   controllers: [AppController],
   providers: [AppService],
