@@ -1,0 +1,81 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import FrontlinePage from './page';
+import { apiFetch } from '@/lib/api-client';
+import { useCurrentUser } from '@/components/current-user-provider';
+
+jest.mock('@/lib/api-client', () => ({
+  apiFetch: jest.fn(),
+  ApiError: class ApiError extends Error {
+    code = 'ERROR';
+    details: unknown[] = [];
+    correlationId = 'test-correlation-id';
+  },
+}));
+jest.mock('@/components/current-user-provider', () => ({
+  useCurrentUser: jest.fn(),
+}));
+
+const mockedApiFetch = apiFetch as jest.MockedFunction<typeof apiFetch>;
+const mockedUseCurrentUser = useCurrentUser as jest.MockedFunction<typeof useCurrentUser>;
+
+describe('FrontlinePage', () => {
+  beforeEach(() => {
+    mockedApiFetch.mockReset();
+    mockedUseCurrentUser.mockReturnValue({
+      id: 'u1',
+      tenantId: 't1',
+      role: 'chw',
+      facilityId: 'f1',
+      fullName: 'Amina',
+      email: 'amina@example.com',
+    });
+  });
+
+  it('loads and renders the caseload for the current facility', async () => {
+    mockedApiFetch.mockResolvedValue([
+      {
+        id: 'e1',
+        personId: 'person-1234567890',
+        facilityId: 'f1',
+        lmpDate: null,
+        estimatedDeliveryDate: '2026-12-01',
+        gestationalAgeWeeks: 20,
+        riskBand: 'low',
+        status: 'Active',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        updatedAt: '2026-08-01T00:00:00.000Z',
+      },
+    ]);
+
+    render(<FrontlinePage />);
+
+    expect(screen.getByText('Loading caseload...')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('#34567890')).toBeInTheDocument());
+    expect(mockedApiFetch).toHaveBeenCalledWith('/pregnancy-episodes?facilityId=f1');
+    expect(screen.getByText('low')).toBeInTheDocument();
+  });
+
+  it('shows a message and never calls the API when the user has no facility assigned', async () => {
+    mockedUseCurrentUser.mockReturnValue({
+      id: 'u1',
+      tenantId: 't1',
+      role: 'supervisor',
+      facilityId: null,
+      fullName: 'Sup',
+      email: 'sup@example.com',
+    });
+
+    render(<FrontlinePage />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('no facility assigned');
+    expect(mockedApiFetch).not.toHaveBeenCalled();
+  });
+
+  it('shows an error message when the load fails', async () => {
+    mockedApiFetch.mockRejectedValue(new Error('network down'));
+
+    render(<FrontlinePage />);
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+  });
+});
