@@ -157,6 +157,29 @@ each build phase follows. Kept up to date as work lands, same as the decision lo
   is supplied. Full details:
   [execution report](docs/superpowers/executions/2026-08-01-risk-scoring-engine-execution.md).
 
+### Backend Build — Plan 4: Referral Lifecycle — ✅ Complete
+
+- `dcba203` — `referral` schema migration + widened `pregnancy_episode.status` `CHECK`
+  constraint to add `Admitted`/`Cancelled`, applied to the live `amhos` project (migration
+  `00000000000008`).
+- `c30e106` — Tenant-isolation RLS policies for `referral` (select/insert/update, no delete),
+  applied to the live project (migration `00000000000009`).
+- `b066f5c` — Strict referral state machine (`referral-state-machine.ts`): 9-value
+  `ReferralStatus` union, `REFERRAL_STATUS_TRANSITIONS` graph, `InvalidReferralStateError`.
+- `4db5dd5` — `ReferralService`: create (facility-accepting check, episode side effect to
+  `Referred`), status transitions (milestone timestamps, `Arrived→Admitted` /
+  `Failed|Cancelled→Active` episode side effects), reads.
+- `5d7ac53` — `ReferralController` + `ReferralModule` wired into `AppModule`.
+- **All 5 tasks complete.** Independently re-verified: 114 unit + 38 e2e tests passing against
+  the live project, clean build, no new security-advisor findings on `referral`, all 5 commits
+  cleanly scoped. **Honest note:** the interface-deviation review found the documented
+  contract (every method/DTO/error/route Plan 6 and 7 depend on) matches with zero deviation,
+  but flagged three purely cosmetic differences from the plan's literal code text (an
+  `import type` fix required by this repo's `tsconfig.json`, one comment reword, one
+  default-vs-namespace import in a test file) — none affect behavior or the contract. Full
+  details:
+  [execution report](docs/superpowers/executions/2026-08-01-referral-lifecycle-execution.md).
+
 ### Full-Stack Build — Plan 8: Admin Dashboard — ✅ Complete
 
 - `378470b` — Admin role added to `ROLE_HOME_ROUTE` + `/admin` landing page.
