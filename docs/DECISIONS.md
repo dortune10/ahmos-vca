@@ -188,6 +188,34 @@ underlying data.
 RBAC distinction between the two roles (this had been glossed over when the dashboard was
 first scoped) and the three concrete options with trade-offs.
 
+### 21. Data access: `@supabase/supabase-js` directly, no separate ORM
+**Decision:** NestJS services use `@supabase/supabase-js` clients (scoped to the requesting
+user's JWT, not a service-role key) for all RLS-governed reads/writes, so Postgres RLS
+enforces tenant/role/facility isolation exactly as designed, rather than adding an ORM
+(Prisma/TypeORM) whose service-role connection would bypass RLS unless every query
+manually re-implemented the same filtering in application code. Schema/migrations are
+managed as SQL files via the Supabase CLI (`supabase/migrations/*.sql`), including RLS
+policies written as plain SQL, rather than a separate ORM migration DSL. A service-role
+client is used only where a system process legitimately needs to bypass RLS (e.g. the
+`risk` module's automated assessment trigger, `audit` module writes).
+**Alternatives considered:** Prisma or TypeORM with a service-role connection and
+hand-written authorization checks in each service method.
+**Why:** This is an implementation-level architectural decision (not previously specified
+in the design spec, which only committed to "Supabase Postgres + RLS"), made during
+implementation planning to keep RLS as the actual enforcement mechanism the spec describes,
+rather than reimplementing the same access rules twice.
+
+### 22. Add `encounter_note` table (spec gap found during implementation planning)
+**Decision:** Added an `encounter_note` table (`id`, `pregnancy_episode_id`, `recorded_by`,
+`recorded_at`, `note_text`, `vitals_json`) to the staff platform spec's data model.
+**Why:** While planning the episode/task module, there was nowhere to actually store what
+the spec's own flows require — "clinician records an encounter note" (Section 5) and the
+risk rules engine needs clinical inputs like BP/anemia markers to score against (Section 2)
+— but no such table existed in the approved spec's Data Model section. This is a genuine
+gap in the reviewed spec, not a new scope decision, so it's being filled in directly rather
+than re-litigated as a choice; flagging here per the standing "log all decisions" rule
+since it does change the data model after spec approval.
+
 ---
 
 ## Still Open
