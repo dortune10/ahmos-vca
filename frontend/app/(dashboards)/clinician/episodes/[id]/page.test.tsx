@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ClinicianEpisodeDetailPage from './page';
 import { apiFetch } from '@/lib/api-client';
+import { useCurrentUser } from '@/components/current-user-provider';
 
 jest.mock('@/lib/api-client', () => ({
   apiFetch: jest.fn(),
@@ -10,11 +11,15 @@ jest.mock('@/lib/api-client', () => ({
     correlationId = 'test-correlation-id';
   },
 }));
+jest.mock('@/components/current-user-provider', () => ({
+  useCurrentUser: jest.fn(),
+}));
 jest.mock('next/navigation', () => ({
   useParams: () => ({ id: 'e1' }),
 }));
 
 const mockedApiFetch = apiFetch as jest.MockedFunction<typeof apiFetch>;
+const mockedUseCurrentUser = useCurrentUser as jest.MockedFunction<typeof useCurrentUser>;
 
 const SAMPLE_EPISODE = {
   id: 'e1',
@@ -28,6 +33,8 @@ const SAMPLE_EPISODE = {
   createdAt: '2026-08-01T00:00:00.000Z',
   updatedAt: '2026-08-01T00:00:00.000Z',
 };
+
+const CLOSED_EPISODE = { ...SAMPLE_EPISODE, status: 'Closed' };
 
 const SAMPLE_RISK_ASSESSMENT = {
   id: 'ra1',
@@ -48,6 +55,10 @@ const SAMPLE_RISK_ASSESSMENT = {
   createdAt: '2026-08-01T00:00:00.000Z',
 };
 
+const SAMPLE_FACILITIES = [
+  { id: 'f2', tenantId: 't1', name: 'District Referral Hospital', type: 'hospital', contactPhone: null, acceptingReferrals: true },
+];
+
 function mockFetchByPath(map: Record<string, unknown>) {
   mockedApiFetch.mockImplementation((path: string) => {
     for (const key of Object.keys(map)) {
@@ -62,12 +73,21 @@ function mockFetchByPath(map: Record<string, unknown>) {
 describe('ClinicianEpisodeDetailPage', () => {
   beforeEach(() => {
     mockedApiFetch.mockReset();
+    mockedUseCurrentUser.mockReturnValue({
+      id: 'u1',
+      tenantId: 't1',
+      role: 'clinician',
+      facilityId: 'f1',
+      fullName: 'Dr. Njoroge',
+      email: 'njoroge@example.com',
+    });
   });
 
   it('loads and renders the episode overview and latest risk assessment with the provisional-thresholds caveat shown prominently', async () => {
     mockFetchByPath({
       '/pregnancy-episodes/e1/risk-assessments/latest': SAMPLE_RISK_ASSESSMENT,
       '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+      '/facilities': SAMPLE_FACILITIES,
     });
 
     render(<ClinicianEpisodeDetailPage />);
@@ -86,6 +106,7 @@ describe('ClinicianEpisodeDetailPage', () => {
     mockFetchByPath({
       '/pregnancy-episodes/e1/risk-assessments/latest': null,
       '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+      '/facilities': SAMPLE_FACILITIES,
     });
 
     render(<ClinicianEpisodeDetailPage />);
@@ -95,93 +116,11 @@ describe('ClinicianEpisodeDetailPage', () => {
     );
   });
 
-  it('requires an override reason before calling the API', async () => {
-    mockFetchByPath({
-      '/pregnancy-episodes/e1/risk-assessments/latest': SAMPLE_RISK_ASSESSMENT,
-      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
-    });
-
-    render(<ClinicianEpisodeDetailPage />);
-    await waitFor(() => expect(screen.getByText('Override risk band')).toBeInTheDocument());
-
-    fireEvent.click(screen.getByText('Override risk band'));
-    fireEvent.click(screen.getByRole('button', { name: 'Submit override' }));
-
-    expect(await screen.findByText(/Override reason is required/)).toBeInTheDocument();
-    expect(mockedApiFetch).not.toHaveBeenCalledWith(
-      expect.stringContaining('/override'),
-      expect.anything(),
-    );
-  });
-
-  it('submits a valid override and shows the updated band, status, and reason', async () => {
-    mockFetchByPath({
-      '/pregnancy-episodes/e1/risk-assessments/latest': SAMPLE_RISK_ASSESSMENT,
-      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
-    });
-
-    render(<ClinicianEpisodeDetailPage />);
-    await waitFor(() => expect(screen.getByText('Override risk band')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Override risk band'));
-
-    mockedApiFetch.mockResolvedValueOnce({
-      ...SAMPLE_RISK_ASSESSMENT,
-      finalRiskBand: 'medium',
-      status: 'Overridden',
-      overriddenBy: 'u1',
-      overrideReason: 'Clinical exam does not support high risk.',
-    });
-
-    fireEvent.change(screen.getByLabelText('New risk band'), { target: { value: 'medium' } });
-    fireEvent.change(screen.getByLabelText('Override reason'), {
-      target: { value: 'Clinical exam does not support high risk.' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Submit override' }));
-
-    await waitFor(() =>
-      expect(mockedApiFetch).toHaveBeenCalledWith('/risk-assessments/ra1/override', {
-        method: 'PATCH',
-        body: { finalRiskBand: 'medium', overrideReason: 'Clinical exam does not support high risk.' },
-      }),
-    );
-    expect(
-      await screen.findByText('Overridden. Reason: Clinical exam does not support high risk.'),
-    ).toBeInTheDocument();
-  });
-
-  it('surfaces an error returned by the backend override call', async () => {
-    mockFetchByPath({
-      '/pregnancy-episodes/e1/risk-assessments/latest': SAMPLE_RISK_ASSESSMENT,
-      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
-    });
-
-    render(<ClinicianEpisodeDetailPage />);
-    await waitFor(() => expect(screen.getByText('Override risk band')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('Override risk band'));
-
-    class OverrideApiError extends Error {
-      code = 'BAD_REQUEST';
-      details: unknown[] = [];
-      correlationId = 'corr-1';
-    }
-    mockedApiFetch.mockRejectedValueOnce(
-      new OverrideApiError('overrideReason must be longer than or equal to 3 characters'),
-    );
-
-    fireEvent.change(screen.getByLabelText('Override reason'), {
-      target: { value: 'Valid length reason passing client-side validation' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Submit override' }));
-
-    expect(
-      await screen.findByText('overrideReason must be longer than or equal to 3 characters'),
-    ).toBeInTheDocument();
-  });
-
   it('submits the encounter note with noteText and all four vitals fields, with no role branching', async () => {
     mockFetchByPath({
       '/pregnancy-episodes/e1/risk-assessments/latest': null,
       '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+      '/facilities': SAMPLE_FACILITIES,
     });
 
     render(<ClinicianEpisodeDetailPage />);
@@ -217,5 +156,190 @@ describe('ClinicianEpisodeDetailPage', () => {
     render(<ClinicianEpisodeDetailPage />);
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+  });
+
+  it('requires an override reason before calling the API', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': SAMPLE_RISK_ASSESSMENT,
+      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+      '/facilities': SAMPLE_FACILITIES,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+    await waitFor(() => expect(screen.getByText('Override risk band')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Override risk band'));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit override' }));
+
+    expect(await screen.findByText(/Override reason is required/)).toBeInTheDocument();
+    expect(mockedApiFetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('/override'),
+      expect.anything(),
+    );
+  });
+
+  it('submits a valid override and shows the updated band, status, and reason', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': SAMPLE_RISK_ASSESSMENT,
+      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+      '/facilities': SAMPLE_FACILITIES,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+    await waitFor(() => expect(screen.getByText('Override risk band')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Override risk band'));
+
+    mockedApiFetch.mockResolvedValueOnce({
+      ...SAMPLE_RISK_ASSESSMENT,
+      finalRiskBand: 'medium',
+      status: 'Overridden',
+      overriddenBy: 'u1',
+      overrideReason: 'Clinical exam does not support high risk.',
+    });
+
+    fireEvent.change(screen.getByLabelText('New risk band'), { target: { value: 'medium' } });
+    fireEvent.change(screen.getByLabelText('Override reason'), {
+      target: { value: 'Clinical exam does not support high risk.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit override' }));
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith('/risk-assessments/ra1/override', {
+        method: 'PATCH',
+        body: { finalRiskBand: 'medium', overrideReason: 'Clinical exam does not support high risk.' },
+      }),
+    );
+    expect(
+      await screen.findByText('Overridden. Reason: Clinical exam does not support high risk.'),
+    ).toBeInTheDocument();
+  });
+
+  it('surfaces an error returned by the backend override call', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': SAMPLE_RISK_ASSESSMENT,
+      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+      '/facilities': SAMPLE_FACILITIES,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+    await waitFor(() => expect(screen.getByText('Override risk band')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Override risk band'));
+
+    class OverrideApiError extends Error {
+      code = 'BAD_REQUEST';
+      details: unknown[] = [];
+      correlationId = 'corr-1';
+    }
+    mockedApiFetch.mockRejectedValueOnce(
+      new OverrideApiError('overrideReason must be longer than or equal to 3 characters'),
+    );
+
+    fireEvent.change(screen.getByLabelText('Override reason'), {
+      target: { value: 'Valid length reason passing client-side validation' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit override' }));
+
+    expect(
+      await screen.findByText('overrideReason must be longer than or equal to 3 characters'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the referral form with facilities loaded from the accepting-referrals list when the episode is Active', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': null,
+      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+      '/facilities': SAMPLE_FACILITIES,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'District Referral Hospital' })).toBeInTheDocument(),
+    );
+    expect(mockedApiFetch).toHaveBeenCalledWith('/facilities?acceptingReferrals=true');
+  });
+
+  it('hides the referral form and explains why when the episode is not eligible (e.g. Closed)', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': null,
+      '/pregnancy-episodes/e1': CLOSED_EPISODE,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Referral creation is not available while this episode is Closed.'),
+      ).toBeInTheDocument(),
+    );
+    expect(mockedApiFetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('/facilities'),
+      expect.anything(),
+    );
+  });
+
+  it('creates a referral with the clinician facility as fromFacilityId and shows the created status', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': null,
+      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+      '/facilities': SAMPLE_FACILITIES,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'District Referral Hospital' })).toBeInTheDocument(),
+    );
+
+    mockedApiFetch.mockResolvedValueOnce({
+      id: 'ref1',
+      pregnancyEpisodeId: 'e1',
+      fromFacilityId: 'f1',
+      toFacilityId: 'f2',
+      reasonCode: 'Suspected preeclampsia',
+      urgency: 'urgent',
+      status: 'Created',
+      createdAt: '2026-08-01T00:00:00.000Z',
+      acceptedAt: null,
+      departedAt: null,
+      arrivedAt: null,
+      closedAt: null,
+    });
+
+    fireEvent.change(screen.getByLabelText('Receiving facility'), { target: { value: 'f2' } });
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Suspected preeclampsia' } });
+    fireEvent.change(screen.getByLabelText('Urgency'), { target: { value: 'urgent' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create referral' }));
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith('/referrals', {
+        method: 'POST',
+        body: {
+          pregnancyEpisodeId: 'e1',
+          toFacilityId: 'f2',
+          fromFacilityId: 'f1',
+          reasonCode: 'Suspected preeclampsia',
+          urgency: 'urgent',
+        },
+      }),
+    );
+    expect(await screen.findByText('Referral created (status: Created).')).toBeInTheDocument();
+  });
+
+  it('requires a receiving facility and a reason before calling the API', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': null,
+      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+      '/facilities': SAMPLE_FACILITIES,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'District Referral Hospital' })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create referral' }));
+
+    expect(await screen.findByText('Select a receiving facility.')).toBeInTheDocument();
+    expect(mockedApiFetch).not.toHaveBeenCalledWith('/referrals', expect.anything());
   });
 });

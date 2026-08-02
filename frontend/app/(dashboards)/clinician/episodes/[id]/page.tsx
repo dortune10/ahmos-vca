@@ -3,9 +3,11 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { apiFetch, ApiError } from '@/lib/api-client';
+import { useCurrentUser } from '@/components/current-user-provider';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { isEpisodeEligibleForReferral } from '@/lib/referral-state-machine';
 
 interface Episode {
   id: string;
@@ -45,7 +47,32 @@ interface RiskAssessment {
   createdAt: string;
 }
 
+interface Facility {
+  id: string;
+  tenantId: string;
+  name: string;
+  type: string;
+  contactPhone: string | null;
+  acceptingReferrals: boolean;
+}
+
+interface Referral {
+  id: string;
+  pregnancyEpisodeId: string;
+  fromFacilityId: string | null;
+  toFacilityId: string;
+  reasonCode: string;
+  urgency: string;
+  status: string;
+  createdAt: string;
+  acceptedAt: string | null;
+  departedAt: string | null;
+  arrivedAt: string | null;
+  closedAt: string | null;
+}
+
 export default function ClinicianEpisodeDetailPage() {
+  const user = useCurrentUser();
   const params = useParams<{ id: string }>();
   const episodeId = params.id;
 
@@ -68,6 +95,14 @@ export default function ClinicianEpisodeDetailPage() {
   const [overrideReason, setOverrideReason] = useState('');
   const [overrideSubmitting, setOverrideSubmitting] = useState(false);
   const [overrideError, setOverrideError] = useState<string | null>(null);
+
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [toFacilityId, setToFacilityId] = useState('');
+  const [reasonCode, setReasonCode] = useState('');
+  const [urgency, setUrgency] = useState<'routine' | 'urgent'>('routine');
+  const [referralSubmitting, setReferralSubmitting] = useState(false);
+  const [referralError, setReferralError] = useState<string | null>(null);
+  const [referralCreated, setReferralCreated] = useState<Referral | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +130,27 @@ export default function ClinicianEpisodeDetailPage() {
       cancelled = true;
     };
   }, [episodeId]);
+
+  useEffect(() => {
+    if (!episode || !isEpisodeEligibleForReferral(episode.status)) {
+      return;
+    }
+    let cancelled = false;
+    apiFetch<Facility[]>('/facilities?acceptingReferrals=true')
+      .then((data) => {
+        if (!cancelled) setFacilities(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setReferralError(
+            err instanceof ApiError ? err.message : 'Failed to load receiving facilities.',
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [episode?.status]);
 
   async function handleNoteSubmit(event: FormEvent) {
     event.preventDefault();
@@ -172,6 +228,43 @@ export default function ClinicianEpisodeDetailPage() {
       setOverrideError(err instanceof Error ? err.message : 'Failed to override risk band.');
     } finally {
       setOverrideSubmitting(false);
+    }
+  }
+
+  async function handleReferralSubmit(event: FormEvent) {
+    event.preventDefault();
+    setReferralError(null);
+    setReferralCreated(null);
+
+    if (!toFacilityId) {
+      setReferralError('Select a receiving facility.');
+      return;
+    }
+    if (!reasonCode.trim()) {
+      setReferralError('A reason is required.');
+      return;
+    }
+
+    setReferralSubmitting(true);
+    try {
+      const created = await apiFetch<Referral>('/referrals', {
+        method: 'POST',
+        body: {
+          pregnancyEpisodeId: episodeId,
+          toFacilityId,
+          fromFacilityId: user.facilityId ?? undefined,
+          reasonCode,
+          urgency,
+        },
+      });
+      setReferralCreated(created);
+      setToFacilityId('');
+      setReasonCode('');
+      setUrgency('routine');
+    } catch (err) {
+      setReferralError(err instanceof Error ? err.message : 'Failed to create referral.');
+    } finally {
+      setReferralSubmitting(false);
     }
   }
 
@@ -331,6 +424,64 @@ export default function ClinicianEpisodeDetailPage() {
             {noteSubmitting ? 'Saving...' : 'Save note'}
           </Button>
         </form>
+      </Card>
+
+      <Card>
+        <h2 className="text-lg font-medium">Create Referral</h2>
+        {!isEpisodeEligibleForReferral(episode.status) ? (
+          <p className="text-sm text-gray-500">
+            Referral creation is not available while this episode is {episode.status}.
+          </p>
+        ) : (
+          <form onSubmit={handleReferralSubmit} className="space-y-4">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="to-facility" className="text-sm font-medium text-gray-700">
+                Receiving facility
+              </label>
+              <select
+                id="to-facility"
+                value={toFacilityId}
+                onChange={(e) => setToFacilityId(e.target.value)}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">Select a facility</option>
+                {facilities.map((facility) => (
+                  <option key={facility.id} value={facility.id}>
+                    {facility.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Input label="Reason" value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} />
+            <div className="flex flex-col gap-1">
+              <label htmlFor="urgency" className="text-sm font-medium text-gray-700">
+                Urgency
+              </label>
+              <select
+                id="urgency"
+                value={urgency}
+                onChange={(e) => setUrgency(e.target.value as 'routine' | 'urgent')}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="routine">routine</option>
+                <option value="urgent">urgent</option>
+              </select>
+            </div>
+            {referralError && (
+              <p role="alert" className="text-sm text-red-600">
+                {referralError}
+              </p>
+            )}
+            {referralCreated && (
+              <p className="text-sm text-green-700">
+                Referral created (status: {referralCreated.status}).
+              </p>
+            )}
+            <Button type="submit" disabled={referralSubmitting}>
+              {referralSubmitting ? 'Creating...' : 'Create referral'}
+            </Button>
+          </form>
+        )}
       </Card>
     </div>
   );
