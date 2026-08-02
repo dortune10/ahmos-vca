@@ -8,13 +8,6 @@ interface PregnancyEpisodeFixture {
   riskBandRows?: { risk_band: string | null }[];
 }
 
-// Mimics the real supabase-js chain closely enough for this service's purposes: `.select()`
-// returns a thenable builder supporting `.eq()`; awaiting it (or letting Promise.all await
-// it) resolves to `{ count, error }` for a count-style select or `{ data, error }` for a
-// row-fetching one. Which canned response a given `.select('id', {...})` count call
-// resolves to is disambiguated by whether `.eq('risk_band', 'high')` was chained onto it
-// before it settles — exactly mirroring how countRegisteredPregnancies vs.
-// countHighRiskCases differ in the real service.
 function buildPregnancyEpisodeTable(fixture: PregnancyEpisodeFixture) {
   const { totalCount = 0, highRiskCount = 0, riskBandRows = [] } = fixture;
   const eqCalls: Array<[string, string]> = [];
@@ -50,14 +43,95 @@ function buildPregnancyEpisodeTable(fixture: PregnancyEpisodeFixture) {
   };
 }
 
+interface CareTaskFixture {
+  totalCount?: number;
+  completedCount?: number;
+}
+
+// Disambiguates the two anc_visit count queries (total vs. completed) the same way
+// buildPregnancyEpisodeTable disambiguates its two count queries: by which `.eq()` was
+// chained on before the caller awaits.
+function buildCareTaskTable(fixture: CareTaskFixture = {}) {
+  const { totalCount = 0, completedCount = 0 } = fixture;
+  const eqCalls: Array<[string, string]> = [];
+
+  return {
+    eqCalls,
+    select: () => {
+      let completedFilterApplied = false;
+      const builder: any = {
+        eq: (col: string, val: string) => {
+          eqCalls.push([col, val]);
+          if (col === 'status' && val === 'Completed') {
+            completedFilterApplied = true;
+          }
+          return builder;
+        },
+        then: (resolve: any) =>
+          resolve({ count: completedFilterApplied ? completedCount : totalCount, error: null }),
+      };
+      return builder;
+    },
+  };
+}
+
+interface ReferralFixture {
+  slaBreachCount?: number;
+  statusCounts?: Partial<Record<'Completed' | 'Failed' | 'Cancelled', number>>;
+}
+
+// Disambiguates the SLA-breach count query (which chains `.not('status', 'in', ...)`) from
+// the three per-status outcome-breakdown count queries (which chain `.eq('status', X)`).
+function buildReferralTable(fixture: ReferralFixture = {}) {
+  const { slaBreachCount = 0, statusCounts = {} } = fixture;
+  const eqCalls: Array<[string, string]> = [];
+  const notCalls: Array<[string, string, string]> = [];
+
+  return {
+    eqCalls,
+    notCalls,
+    select: () => {
+      let isSlaBreachQuery = false;
+      let matchedStatus: string | null = null;
+      const builder: any = {
+        not: (col: string, op: string, val: string) => {
+          notCalls.push([col, op, val]);
+          isSlaBreachQuery = true;
+          return builder;
+        },
+        lt: () => builder,
+        eq: (col: string, val: string) => {
+          eqCalls.push([col, val]);
+          if (col === 'status') {
+            matchedStatus = val;
+          }
+          return builder;
+        },
+        then: (resolve: any) =>
+          resolve({
+            count: isSlaBreachQuery
+              ? slaBreachCount
+              : matchedStatus
+                ? (statusCounts[matchedStatus as 'Completed' | 'Failed' | 'Cancelled'] ?? 0)
+                : 0,
+            error: null,
+          }),
+      };
+      return builder;
+    },
+  };
+}
+
 function buildFakeClient(tables: {
-  pregnancyEpisode: ReturnType<typeof buildPregnancyEpisodeTable>;
+  pregnancyEpisode?: ReturnType<typeof buildPregnancyEpisodeTable>;
+  careTask?: ReturnType<typeof buildCareTaskTable>;
+  referral?: ReturnType<typeof buildReferralTable>;
 }) {
   return {
     from: (table: string) => {
-      if (table === 'pregnancy_episode') {
-        return tables.pregnancyEpisode;
-      }
+      if (table === 'pregnancy_episode' && tables.pregnancyEpisode) return tables.pregnancyEpisode;
+      if (table === 'care_task' && tables.careTask) return tables.careTask;
+      if (table === 'referral' && tables.referral) return tables.referral;
       throw new Error(`unexpected table "${table}" queried in this test (no fixture provided)`);
     },
   };
@@ -70,11 +144,22 @@ async function buildService(supabaseService: SupabaseService) {
   return module.get<ReportingService>(ReportingService);
 }
 
+// getKpiSummary queries pregnancy_episode, care_task, and referral unconditionally on every
+// call (via Promise.all across all six aggregates), while buildFakeClient throws on any
+// table queried without an explicit fixture (to catch real typos/bugs). So every test below
+// must supply a fixture for all three tables, even ones it isn't exercising — these three
+// NEUTRAL_* constants are that filler, reused across tests the same way Task 1 introduced
+// NEUTRAL_PREGNANCY_EPISODE for its own not-yet-implemented-fields test.
+const NEUTRAL_PREGNANCY_EPISODE = buildPregnancyEpisodeTable({});
+const NEUTRAL_CARE_TASK = buildCareTaskTable({});
+const NEUTRAL_REFERRAL = buildReferralTable({});
+
 describe('ReportingService.getKpiSummary — episode-based aggregates', () => {
   it('counts registeredPregnancies with no facility filter', async () => {
     const pregnancyEpisode = buildPregnancyEpisodeTable({ totalCount: 4 });
     const supabaseService = {
-      getClientForUser: () => buildFakeClient({ pregnancyEpisode }),
+      getClientForUser: () =>
+        buildFakeClient({ pregnancyEpisode, careTask: NEUTRAL_CARE_TASK, referral: NEUTRAL_REFERRAL }),
     } as unknown as SupabaseService;
 
     const service = await buildService(supabaseService);
@@ -92,7 +177,8 @@ describe('ReportingService.getKpiSummary — episode-based aggregates', () => {
   it('scopes registeredPregnancies to facilityId when provided', async () => {
     const pregnancyEpisode = buildPregnancyEpisodeTable({ totalCount: 2 });
     const supabaseService = {
-      getClientForUser: () => buildFakeClient({ pregnancyEpisode }),
+      getClientForUser: () =>
+        buildFakeClient({ pregnancyEpisode, careTask: NEUTRAL_CARE_TASK, referral: NEUTRAL_REFERRAL }),
     } as unknown as SupabaseService;
 
     const service = await buildService(supabaseService);
@@ -105,7 +191,8 @@ describe('ReportingService.getKpiSummary — episode-based aggregates', () => {
   it('counts highRiskCaseCount as episodes with risk_band = high only, independent of the total', async () => {
     const pregnancyEpisode = buildPregnancyEpisodeTable({ totalCount: 10, highRiskCount: 3 });
     const supabaseService = {
-      getClientForUser: () => buildFakeClient({ pregnancyEpisode }),
+      getClientForUser: () =>
+        buildFakeClient({ pregnancyEpisode, careTask: NEUTRAL_CARE_TASK, referral: NEUTRAL_REFERRAL }),
     } as unknown as SupabaseService;
 
     const service = await buildService(supabaseService);
@@ -122,11 +209,12 @@ describe('ReportingService.getKpiSummary — episode-based aggregates', () => {
         { risk_band: 'low' },
         { risk_band: 'medium' },
         { risk_band: 'high' },
-        { risk_band: null }, // no risk assessment run yet — must not land in any bucket
+        { risk_band: null },
       ],
     });
     const supabaseService = {
-      getClientForUser: () => buildFakeClient({ pregnancyEpisode }),
+      getClientForUser: () =>
+        buildFakeClient({ pregnancyEpisode, careTask: NEUTRAL_CARE_TASK, referral: NEUTRAL_REFERRAL }),
     } as unknown as SupabaseService;
 
     const service = await buildService(supabaseService);
@@ -134,18 +222,89 @@ describe('ReportingService.getKpiSummary — episode-based aggregates', () => {
 
     expect(result.riskBandDistribution).toEqual({ low: 2, medium: 1, high: 1 });
   });
+});
 
-  it('returns the not-yet-implemented Task 2 fields at their documented neutral values', async () => {
-    const pregnancyEpisode = buildPregnancyEpisodeTable({});
+describe('ReportingService.getKpiSummary — anc task completion rate', () => {
+  it('computes completed / total for anc_visit tasks only', async () => {
+    const careTask = buildCareTaskTable({ totalCount: 4, completedCount: 3 });
     const supabaseService = {
-      getClientForUser: () => buildFakeClient({ pregnancyEpisode }),
+      getClientForUser: () =>
+        buildFakeClient({ pregnancyEpisode: NEUTRAL_PREGNANCY_EPISODE, careTask, referral: NEUTRAL_REFERRAL }),
+    } as unknown as SupabaseService;
+
+    const service = await buildService(supabaseService);
+    const result = await service.getKpiSummary('jwt');
+
+    expect(result.ancTaskCompletionRate).toBe(0.75);
+  });
+
+  it('returns 0 rather than dividing by zero when there are no anc_visit tasks', async () => {
+    const careTask = buildCareTaskTable({ totalCount: 0, completedCount: 0 });
+    const supabaseService = {
+      getClientForUser: () =>
+        buildFakeClient({ pregnancyEpisode: NEUTRAL_PREGNANCY_EPISODE, careTask, referral: NEUTRAL_REFERRAL }),
     } as unknown as SupabaseService;
 
     const service = await buildService(supabaseService);
     const result = await service.getKpiSummary('jwt');
 
     expect(result.ancTaskCompletionRate).toBe(0);
-    expect(result.referralSlaBreaches).toBe(0);
-    expect(result.referralOutcomeBreakdown).toEqual({ completed: 0, failed: 0, cancelled: 0 });
+  });
+
+  it('scopes both the total and completed counts to facilityId via the pregnancy_episode join', async () => {
+    const careTask = buildCareTaskTable({ totalCount: 1, completedCount: 1 });
+    const supabaseService = {
+      getClientForUser: () =>
+        buildFakeClient({ pregnancyEpisode: NEUTRAL_PREGNANCY_EPISODE, careTask, referral: NEUTRAL_REFERRAL }),
+    } as unknown as SupabaseService;
+
+    const service = await buildService(supabaseService);
+    await service.getKpiSummary('jwt', 'f1');
+
+    expect(careTask.eqCalls).toContainEqual(['pregnancy_episode.facility_id', 'f1']);
+  });
+});
+
+describe('ReportingService.getKpiSummary — referral SLA breaches and outcome breakdown', () => {
+  it('counts referralSlaBreaches using the terminal-status exclusion and the 24-hour cutoff', async () => {
+    const referral = buildReferralTable({ slaBreachCount: 2 });
+    const supabaseService = {
+      getClientForUser: () =>
+        buildFakeClient({ pregnancyEpisode: NEUTRAL_PREGNANCY_EPISODE, referral, careTask: NEUTRAL_CARE_TASK }),
+    } as unknown as SupabaseService;
+
+    const service = await buildService(supabaseService);
+    const result = await service.getKpiSummary('jwt');
+
+    expect(result.referralSlaBreaches).toBe(2);
+    expect(referral.notCalls).toContainEqual(['status', 'in', '(Completed,Failed,Cancelled)']);
+  });
+
+  it('computes referralOutcomeBreakdown across Completed, Failed, and Cancelled', async () => {
+    const referral = buildReferralTable({
+      statusCounts: { Completed: 5, Failed: 2, Cancelled: 1 },
+    });
+    const supabaseService = {
+      getClientForUser: () =>
+        buildFakeClient({ pregnancyEpisode: NEUTRAL_PREGNANCY_EPISODE, referral, careTask: NEUTRAL_CARE_TASK }),
+    } as unknown as SupabaseService;
+
+    const service = await buildService(supabaseService);
+    const result = await service.getKpiSummary('jwt');
+
+    expect(result.referralOutcomeBreakdown).toEqual({ completed: 5, failed: 2, cancelled: 1 });
+  });
+
+  it('scopes referral aggregates to facilityId via the pregnancy_episode join', async () => {
+    const referral = buildReferralTable({ slaBreachCount: 1, statusCounts: { Completed: 1 } });
+    const supabaseService = {
+      getClientForUser: () =>
+        buildFakeClient({ pregnancyEpisode: NEUTRAL_PREGNANCY_EPISODE, referral, careTask: NEUTRAL_CARE_TASK }),
+    } as unknown as SupabaseService;
+
+    const service = await buildService(supabaseService);
+    await service.getKpiSummary('jwt', 'f1');
+
+    expect(referral.eqCalls).toContainEqual(['pregnancy_episode.facility_id', 'f1']);
   });
 });

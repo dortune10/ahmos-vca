@@ -1,11 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../common/supabase/supabase.service';
+import { TERMINAL_REFERRAL_STATUSES } from '../referral/referral-state-machine';
 import {
   KpiSummaryDto,
   ReferralOutcomeBreakdownDto,
   RiskBandDistributionDto,
 } from './dto/kpi-summary.dto';
+
+// Placeholder SLA threshold for "referral open too long" — a single flat default applied
+// regardless of urgency, pending real targets from clinical/operations stakeholders. See
+// this plan's Global Constraints for the full rationale. Exported as a named constant
+// specifically so it's a one-line change once real targets exist.
+export const REFERRAL_SLA_BREACH_HOURS = 24;
+
+const OUTCOME_FIELD_BY_STATUS: Record<string, keyof ReferralOutcomeBreakdownDto> = {
+  Completed: 'completed',
+  Failed: 'failed',
+  Cancelled: 'cancelled',
+};
 
 @Injectable()
 export class ReportingService {
@@ -98,29 +111,74 @@ export class ReportingService {
     return distribution;
   }
 
-  // Implemented for real in Task 2 of this plan (needs care_task fixtures this task's
-  // tests don't set up) — returns a neutral 0 for now so getKpiSummary() is already fully
-  // callable and its DTO shape is complete from this task onward.
-  private async computeAncTaskCompletionRate(
-    _client: SupabaseClient,
-    _facilityId?: string,
-  ): Promise<number> {
-    return 0;
+  private slaBreachCutoffIso(): string {
+    return new Date(Date.now() - REFERRAL_SLA_BREACH_HOURS * 60 * 60 * 1000).toISOString();
   }
 
-  // Implemented for real in Task 2.
-  private async countReferralSlaBreaches(
-    _client: SupabaseClient,
-    _facilityId?: string,
-  ): Promise<number> {
-    return 0;
+  private async computeAncTaskCompletionRate(client: SupabaseClient, facilityId?: string): Promise<number> {
+    // Known MVP simplification — see this plan's Global Constraints ("ANC coverage proxy,
+    // not the PRD's literal metric"). This is completed anc_visit tasks / all anc_visit
+    // tasks, not the PRD's 1st/4th/8th-visit coverage figure.
+    const totalFilter = (query: any) => {
+      let scoped = query.eq('task_type', 'anc_visit');
+      if (facilityId) {
+        scoped = scoped.eq('pregnancy_episode.facility_id', facilityId);
+      }
+      return scoped;
+    };
+    const completedFilter = (query: any) => {
+      let scoped = query.eq('task_type', 'anc_visit').eq('status', 'Completed');
+      if (facilityId) {
+        scoped = scoped.eq('pregnancy_episode.facility_id', facilityId);
+      }
+      return scoped;
+    };
+
+    const [total, completed] = await Promise.all([
+      this.countRows(client, 'care_task', 'id, pregnancy_episode!inner(facility_id)', totalFilter),
+      this.countRows(client, 'care_task', 'id, pregnancy_episode!inner(facility_id)', completedFilter),
+    ]);
+
+    return total > 0 ? completed / total : 0;
   }
 
-  // Implemented for real in Task 2.
+  private countReferralSlaBreaches(client: SupabaseClient, facilityId?: string): Promise<number> {
+    const cutoffIso = this.slaBreachCutoffIso();
+    return this.countRows(client, 'referral', 'id, pregnancy_episode!inner(facility_id)', (query) => {
+      let scoped = query
+        .not('status', 'in', `(${TERMINAL_REFERRAL_STATUSES.join(',')})`)
+        .lt('created_at', cutoffIso);
+      if (facilityId) {
+        scoped = scoped.eq('pregnancy_episode.facility_id', facilityId);
+      }
+      return scoped;
+    });
+  }
+
   private async computeReferralOutcomeBreakdown(
-    _client: SupabaseClient,
-    _facilityId?: string,
+    client: SupabaseClient,
+    facilityId?: string,
   ): Promise<ReferralOutcomeBreakdownDto> {
-    return { completed: 0, failed: 0, cancelled: 0 };
+    const breakdown: ReferralOutcomeBreakdownDto = { completed: 0, failed: 0, cancelled: 0 };
+
+    await Promise.all(
+      TERMINAL_REFERRAL_STATUSES.map(async (status) => {
+        const count = await this.countRows(
+          client,
+          'referral',
+          'id, pregnancy_episode!inner(facility_id)',
+          (query) => {
+            let scoped = query.eq('status', status);
+            if (facilityId) {
+              scoped = scoped.eq('pregnancy_episode.facility_id', facilityId);
+            }
+            return scoped;
+          },
+        );
+        breakdown[OUTCOME_FIELD_BY_STATUS[status]] = count;
+      }),
+    );
+
+    return breakdown;
   }
 }
