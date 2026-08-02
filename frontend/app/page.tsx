@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getCurrentAppUser } from '@/lib/current-user';
-import { ROLE_HOME_ROUTE } from './(dashboards)/layout';
+import { ROLE_HOME_ROUTE } from '@/lib/role-routing';
 
 export default async function RootPage() {
   const user = await getCurrentAppUser();
@@ -14,7 +14,7 @@ export default async function RootPage() {
   }
 
   // Authenticated successfully, but this role has no dashboard built yet (e.g. admin,
-  // until Plan 8 is executed — see ROLE_HOME_ROUTE's own comment in (dashboards)/layout.tsx).
+  // until Plan 8 is executed — see ROLE_HOME_ROUTE's own comment in lib/role-routing.ts).
   // Falling back to redirect('/login') here (the previous behavior) made a *successful*
   // sign-in for this role look identical to a failed one — real bug, not just a rough edge:
   // it's what made the bootstrap admin account appear unable to log in at all.

@@ -2,32 +2,9 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { ReactNode } from 'react';
 import { getCurrentAppUser } from '@/lib/current-user';
+import { resolveRedirectForRole } from '@/lib/role-routing';
 import { CurrentUserProvider } from '@/components/current-user-provider';
 import { Nav } from '@/components/nav';
-
-// Home route for each MVP role, per docs/DECISIONS.md #20 and the design spec's Section 3
-// routing table. All five MVP roles (chw, nurse, clinician, supervisor, admin) are mapped
-// as of Plan 8 — this map is the single extension point for "where does role X land after
-// login."
-export const ROLE_HOME_ROUTE: Record<string, string> = {
-  chw: '/frontline',
-  nurse: '/frontline',
-  clinician: '/clinician',
-  supervisor: '/supervisor',
-  admin: '/admin',
-};
-
-// Pure, framework-free, and unit-tested directly (see layout.test.ts) — this is the actual
-// decision logic; everything else in this file is Next.js plumbing around it.
-export function resolveRedirectForRole(pathname: string, role: string): string | null {
-  const homeRoute = ROLE_HOME_ROUTE[role];
-  if (!homeRoute) {
-    // Role with no configured home route yet (e.g. admin, until Plan 8 adds one): no
-    // enforcement here. That role's own plan owns wiring its route in.
-    return null;
-  }
-  return pathname.startsWith(homeRoute) ? null : homeRoute;
-}
 
 export default async function DashboardsLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentAppUser();
