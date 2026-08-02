@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../common/supabase/supabase.service';
 import { TERMINAL_REFERRAL_STATUSES } from '../referral/referral-state-machine';
+import { ReferralResponseDto } from '../referral/dto/referral-response.dto';
 import {
   KpiSummaryDto,
   ReferralOutcomeBreakdownDto,
@@ -51,6 +52,29 @@ export class ReportingService {
     dto.referralSlaBreaches = referralSlaBreaches;
     dto.referralOutcomeBreakdown = referralOutcomeBreakdown;
     return dto;
+  }
+
+  async getSlaBreachDetail(jwt: string, facilityId?: string): Promise<ReferralResponseDto[]> {
+    const client = this.supabaseService.getClientForUser(jwt);
+    const cutoffIso = this.slaBreachCutoffIso();
+
+    let query = client
+      .from('referral')
+      .select('*, pregnancy_episode!inner(facility_id)')
+      .not('status', 'in', `(${TERMINAL_REFERRAL_STATUSES.join(',')})`)
+      .lt('created_at', cutoffIso);
+    if (facilityId) {
+      query = query.eq('pregnancy_episode.facility_id', facilityId);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: true });
+    if (error) {
+      throw error;
+    }
+    // The embedded `pregnancy_episode` object the join above adds to each row is extra
+    // data ReferralResponseDto.fromRow simply ignores — it only reads the referral table's
+    // own named columns (Plan 4's fromRow implementation), so no conflict.
+    return (data ?? []).map(ReferralResponseDto.fromRow);
   }
 
   private async countRows(

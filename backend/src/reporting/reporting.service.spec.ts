@@ -308,3 +308,64 @@ describe('ReportingService.getKpiSummary — referral SLA breaches and outcome b
     expect(referral.eqCalls).toContainEqual(['pregnancy_episode.facility_id', 'f1']);
   });
 });
+
+function buildReferralRowsTable(rows: any[]) {
+  const calls: { not?: [string, string, string]; eq?: [string, string] } = {};
+  const builder: any = {
+    not: (...args: [string, string, string]) => {
+      calls.not = args;
+      return builder;
+    },
+    lt: () => builder,
+    eq: (...args: [string, string]) => {
+      calls.eq = args;
+      return builder;
+    },
+    order: () => Promise.resolve({ data: rows, error: null }),
+  };
+  return { select: () => builder, calls };
+}
+
+describe('ReportingService.getSlaBreachDetail', () => {
+  it('returns breaching referrals mapped through ReferralResponseDto', async () => {
+    const row = {
+      id: 'r1',
+      pregnancy_episode_id: 'e1',
+      from_facility_id: 'f0',
+      to_facility_id: 'f1',
+      reason_code: 'high_risk_pregnancy',
+      urgency: 'urgent',
+      status: 'Sent',
+      created_at: '2020-01-01T00:00:00.000Z',
+      accepted_at: null,
+      departed_at: null,
+      arrived_at: null,
+      closed_at: null,
+    };
+    const referralTable = buildReferralRowsTable([row]);
+    const supabaseService = {
+      getClientForUser: () => ({ from: () => referralTable }),
+    } as unknown as SupabaseService;
+
+    const service = await buildService(supabaseService);
+    const result = await service.getSlaBreachDetail('jwt');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('r1');
+    expect(result[0].pregnancyEpisodeId).toBe('e1');
+    expect(result[0].status).toBe('Sent');
+    expect(referralTable.calls.not).toEqual(['status', 'in', '(Completed,Failed,Cancelled)']);
+  });
+
+  it('scopes to facilityId when provided', async () => {
+    const referralTable = buildReferralRowsTable([]);
+    const supabaseService = {
+      getClientForUser: () => ({ from: () => referralTable }),
+    } as unknown as SupabaseService;
+
+    const service = await buildService(supabaseService);
+    await service.getSlaBreachDetail('jwt', 'f1');
+
+    expect(referralTable.calls.eq).toEqual(['pregnancy_episode.facility_id', 'f1']);
+  });
+});

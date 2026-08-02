@@ -12,6 +12,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { EpisodeModule } from './episode/episode.module';
 import { RiskModule } from './risk/risk.module';
 import { ReferralModule } from './referral/referral.module';
+import { ReportingModule } from './reporting/reporting.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ReferralModule } from './referral/referral.module';
     EpisodeModule,
     RiskModule,
     ReferralModule,
+    ReportingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
