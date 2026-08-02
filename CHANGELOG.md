@@ -192,6 +192,40 @@ each build phase follows. Kept up to date as work lands, same as the decision lo
   Full details, including one commit with a mismatched (but content-correct) message caused
   by a concurrent-agent git issue below: [execution report](docs/superpowers/executions/2026-08-01-admin-dashboard-execution.md).
 
+### Full-Stack Build — Plan 6: Clinician Dashboard — ✅ Complete
+
+- `99e3adb` — Batch person lookup (`GET /api/v1/persons?ids=`) added to the identity module,
+  used by the triage board to resolve many person records in one call.
+- `5da6a84` — Clinician "Referrals" nav link added to the shared `nav.tsx` (all 5 roles' links
+  and the sign-out button confirmed still intact by this plan's verification).
+- `a9eeb5d` — Clinician facility triage board, sorted by risk band then EDD.
+- `f4edeeb` — Frontend mirror of Plan 4's referral state machine, plus an episode-eligibility
+  rule for when a referral can be created — verified byte-for-byte identical to the backend's
+  real state machine.
+- `28ac0aa` / `1ee09cc` / `ab6d856` — Clinician episode detail page: risk assessment display,
+  encounter note form, risk override control, and referral creation form.
+- `a0dd3a1` — Clinician referral status view, with transitions gated by the state-machine
+  mirror.
+- `3f7a4f4` — Real bug fix, found via live-browser testing after the plan's own tasks were
+  done, not by any test suite: the backend sends an empty HTTP body for "no risk assessment
+  yet," which the frontend's `apiFetch` resolves to `undefined`, not the `null` the episode
+  detail page's render check expected — normalized with `?? null` before the check.
+- **Two real bugs found and fixed during this plan's own live-browser verification, neither
+  caught by any test suite:** (1) an `err instanceof ApiError` check too narrow for real
+  `Error` subclasses, widened to `instanceof Error` in the two handlers where it was found
+  (confirmed safe: neither handler reads any `ApiError`-specific field); (2) the `undefined`-
+  vs-`null` risk-assessment gap above (`3f7a4f4`). The independent review flagged that the
+  same `apiFetch`-empty-body-resolves-to-`undefined` pattern could recur on any future page
+  that checks `someValue === null` against an `apiFetch` result — logged as a watch item in
+  `docs/DECISIONS.md`, not a current bug elsewhere (a full-codebase search found no other page
+  with this exact issue today).
+- **All 8 tasks complete.** Independently re-verified: 116 backend unit + 38 backend e2e + 81
+  frontend tests passing, backend build/typecheck clean, frontend build's 14 ESLint errors
+  confirmed 100% pre-existing (byte-identical to the commit before this plan started, none
+  touching Plan 6 files), zero new migrations, `person` RLS policy unchanged and confirmed to
+  cover the new batch-lookup query pattern, no new security-advisor findings, and the referral
+  state-machine mirror matches the backend exactly. Full details: [execution report](docs/superpowers/executions/2026-08-01-clinician-dashboard-execution.md).
+
 ### Post-Launch Fixes: Sign-Out and Input Contrast
 
 - Added a working "Sign out" button to `frontend/components/nav.tsx` (previously missing
