@@ -37,7 +37,18 @@ export class IdentityController {
   }
 
   @Get()
-  search(@CurrentUser() user: CurrentUserPayload, @Query('phone') phone: string) {
-    return this.identityService.search(user.jwt, phone);
+  search(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query('phone') phone?: string,
+    @Query('ids') ids?: string,
+  ) {
+    if (ids) {
+      const idList = ids
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0);
+      return this.identityService.findByIds(user.jwt, idList);
+    }
+    return this.identityService.search(user.jwt, phone as string);
   }
 }

@@ -26,6 +26,18 @@ export class IdentityService {
     return (data ?? []).map(PersonResponseDto.fromRow);
   }
 
+  async findByIds(jwt: string, ids: string[]): Promise<PersonResponseDto[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const client = this.supabaseService.getClientForUser(jwt);
+    const { data, error } = await client.from('person').select('*').in('id', ids);
+    if (error) {
+      throw error;
+    }
+    return (data ?? []).map(PersonResponseDto.fromRow);
+  }
+
   async create(
     jwt: string,
     actorUserId: string,
