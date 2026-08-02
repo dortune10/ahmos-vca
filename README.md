@@ -109,12 +109,53 @@ local dev.
    it in the next step. Confirm it's live: `curl https://<railway-url>/api/v1/health` should
    return `{"status":"ok"}`.
 
+#### Backend alternative: Render (free tier, no trial clock)
+
+Railway's free usage is a time-limited trial; Render's free tier for web services has no
+trial — it's free indefinitely, at the cost of the service spinning down after ~15 minutes
+of inactivity (next request pays a ~30-50s cold-start wake-up). Same repo, same env vars,
+different host:
+
+1. [render.com](https://render.com) → sign in with GitHub → New → Web Service → connect
+   this repo.
+2. **Root Directory:** `backend`. **Runtime:** Node. **Instance Type:** Free.
+3. **Build Command:** `npm install && npm run build`. **Start Command:**
+   `npm run start:prod`.
+4. Same environment variables as the Railway list above.
+5. Deploy. Render gives you a URL like `https://<service>.onrender.com` — use it exactly
+   like the Railway URL in steps 2-3 below.
+
+#### Backend alternative: Google Cloud Run (genuinely free for low traffic, needs Docker)
+
+No trial clock and no idle-sleep tradeoff to worry about at low request volumes (2 million
+requests/month on the always-free tier), but Cloud Run deploys containers, so it needs the
+`backend/Dockerfile` already in this repo (multi-stage build: `npm run build`, then
+`node dist/main` in a slim runtime image — not build-verified locally since this
+environment has no Docker installed, but it follows the standard NestJS container pattern).
+
+1. Install and authenticate the `gcloud` CLI, then from the `backend/` directory:
+   ```bash
+   gcloud run deploy amhos-backend \
+     --source . \
+     --region us-central1 \
+     --allow-unauthenticated \
+     --set-env-vars ANTHROPIC_MODEL=claude-sonnet-5
+   ```
+2. Set the remaining environment variables (`SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, and later `FRONTEND_URL`) either via
+   more `--set-env-vars` flags or afterward in the Cloud Run console — never pass real
+   secret values on a shared/logged shell history if you can avoid it; the console's
+   "Variables & Secrets" tab is safer for anything sensitive.
+3. Cloud Run prints a public URL (`https://amhos-backend-<hash>.a.run.app`) — use it exactly
+   like the Railway URL in steps 2-3 below.
+
 ### 2. Frontend → Vercel
 
 1. [vercel.com](https://vercel.com) → sign in with GitHub → Add New → Project → import this
    repo.
 2. Set **Root Directory** to `frontend`.
-3. Add environment variables: `NEXT_PUBLIC_API_BASE_URL` = your Railway URL from step 1.5,
+3. Add environment variables: `NEXT_PUBLIC_API_BASE_URL` = your backend's public URL from
+   step 1 (whichever host you used — Railway, Render, or Cloud Run),
    `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (same values as the
    backend's `SUPABASE_URL`/`SUPABASE_ANON_KEY` — the anon key is safe client-side by
    design, RLS is the real access control).
@@ -122,10 +163,12 @@ local dev.
 
 ### 3. Close the loop
 
-Back in Railway, set `FRONTEND_URL` to the Vercel URL from step 2.4 and redeploy the
-backend (Railway usually redeploys automatically on env var change). This is what allows
-CORS to accept requests from the live frontend — without it, every data page will fail with
-"Failed to load..." exactly like the local CORS bug fixed on 2026-08-01.
+Back in whichever backend host you used, set `FRONTEND_URL` to the Vercel URL from step 2.4
+and redeploy (Railway and Render both redeploy automatically on env var change; Cloud Run
+needs `gcloud run services update amhos-backend --set-env-vars FRONTEND_URL=<vercel-url>`).
+This is what allows CORS to accept requests from the live frontend — without it, every data
+page will fail with "Failed to load..." exactly like the local CORS bug fixed on
+2026-08-01.
 
 ### 4. Verify
 
