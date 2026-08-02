@@ -226,6 +226,43 @@ each build phase follows. Kept up to date as work lands, same as the decision lo
   cover the new batch-lookup query pattern, no new security-advisor findings, and the referral
   state-machine mirror matches the backend exactly. Full details: [execution report](docs/superpowers/executions/2026-08-01-clinician-dashboard-execution.md).
 
+### Full-Stack Build — Plan 7: Supervisor Dashboard — ✅ Complete
+
+- `bfea96f` — Reporting module added with episode-based KPI aggregates (registered
+  pregnancies, ANC task completion rate, high-risk case count, referral SLA breach count,
+  risk-band distribution, referral outcome breakdown), each query routed through the caller's
+  own RLS-scoped Supabase client — no service-role bypass anywhere in the module.
+- `2a51333` — ANC task completion rate and referral SLA/outcome-breakdown aggregates
+  implemented for real (test-scaffolding fixes to `buildFakeClient`'s fixtures landed in the
+  same commit as this production work).
+- `ca81520` — Reporting controller (`GET /api/v1/reports/kpi-summary`,
+  `GET /api/v1/reports/sla-breaches`) added and wired into `AppModule`, with e2e coverage.
+- `30d535e` — Supervisor KPI dashboard page.
+- `78b784b` — Supervisor SLA-breach referral cohort page (hours-open computation, truncated
+  episode id, urgency/status display).
+- `c098eca` — Supervisor "Referral SLA" nav link added to the shared `nav.tsx` (all 5 roles'
+  links and the sign-out button confirmed still intact).
+- **All tasks complete.** Independently re-verified: 128 backend unit + 42 backend e2e + 87
+  frontend tests passing, clean backend/frontend builds (zero new ESLint errors or warnings),
+  zero new migrations, and — most importantly — **no cross-tenant leak risk found** in the new
+  cross-entity reporting queries: every aggregate goes through the caller's own JWT-scoped
+  Supabase client, riding on the same tenant-scoped RLS policies every other module already
+  uses. The independent review also corrected one inaccurate claim in the original report (an
+  import described as type-only that is actually a regular value import — a documentation
+  correction only, not a functional issue) and confirmed two pre-existing, platform-wide MVP
+  gaps as genuinely real and previously unnoticed: no MFA on any role, and no browser-driven
+  end-to-end tests exist anywhere in the repo (both now logged in `docs/DECISIONS.md`'s "Still
+  Open" section). A third flagged gap (facility-level vs. tenant-level RLS granularity) turned
+  out to already be documented in the referral RLS migration file itself, so no new decision
+  entry was needed for it. Full details: [execution report](docs/superpowers/executions/2026-08-01-supervisor-dashboard-execution.md).
+
+**All 8 implementation plans for the staff platform MVP are now complete and merged.** The
+platform described in
+[`docs/superpowers/specs/2026-08-01-amhos-staff-platform-design.md`](docs/superpowers/specs/2026-08-01-amhos-staff-platform-design.md)
+is code-complete — with two confirmed, honestly-tracked gaps against that spec (no MFA, no
+browser-driven e2e tests; see the execution report's "MVP Gap Check" section and the new
+"Still Open" entries in `docs/DECISIONS.md`) rather than a claim that nothing remains to do.
+
 ### Post-Launch Fixes: Sign-Out and Input Contrast
 
 - Added a working "Sign out" button to `frontend/components/nav.tsx` (previously missing
