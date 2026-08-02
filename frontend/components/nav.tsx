@@ -15,7 +15,10 @@ const NAV_LINKS_BY_ROLE: Record<string, { href: string; label: string }[]> = {
     { href: '/frontline', label: 'Caseload' },
     { href: '/frontline/tasks', label: 'Visit Checklist' },
   ],
-  clinician: [{ href: '/clinician', label: 'Triage Board' }],
+  clinician: [
+    { href: '/clinician', label: 'Triage Board' },
+    { href: '/clinician/referrals', label: 'Referrals' },
+  ],
   supervisor: [{ href: '/supervisor', label: 'KPIs' }],
   admin: [{ href: '/admin', label: 'Admin' }],
 };

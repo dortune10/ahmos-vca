@@ -59,4 +59,17 @@ describe('Nav', () => {
     expect(mockPush).toHaveBeenCalledWith('/login');
     expect(mockRefresh).toHaveBeenCalled();
   });
+
+  it('shows both clinician links: Triage Board and Referrals', () => {
+    render(<Nav user={buildUser({ role: 'clinician' })} />);
+
+    expect(screen.getByRole('link', { name: 'Triage Board' })).toHaveAttribute(
+      'href',
+      '/clinician',
+    );
+    expect(screen.getByRole('link', { name: 'Referrals' })).toHaveAttribute(
+      'href',
+      '/clinician/referrals',
+    );
+  });
 });
