@@ -111,11 +111,22 @@ export default function ClinicianEpisodeDetailPage() {
       try {
         const [loadedEpisode, latestRisk] = await Promise.all([
           apiFetch<Episode>(`/pregnancy-episodes/${episodeId}`),
-          apiFetch<RiskAssessment | null>(`/pregnancy-episodes/${episodeId}/risk-assessments/latest`),
+          // Typed `RiskAssessment | null | undefined`, not just `| null`, because the real
+          // backend sends an empty response body (Content-Length: 0) when there is no
+          // assessment yet, not the literal JSON string "null" — apiFetch's
+          // `rawBody ? JSON.parse(rawBody) : undefined` resolves an empty body to
+          // `undefined`. Every test in this file mocks apiFetch directly and hands back the
+          // JS value `null` literally, which is why this never failed in Jest; only a real
+          // browser hitting the real endpoint surfaced it. Normalized to `null` immediately
+          // below so every other `riskAssessment === null` check in this component stays
+          // correct without having to special-case `undefined` everywhere.
+          apiFetch<RiskAssessment | null | undefined>(
+            `/pregnancy-episodes/${episodeId}/risk-assessments/latest`,
+          ),
         ]);
         if (cancelled) return;
         setEpisode(loadedEpisode);
-        setRiskAssessment(latestRisk);
+        setRiskAssessment(latestRisk ?? null);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : 'Failed to load episode.');
