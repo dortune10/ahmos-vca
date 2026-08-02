@@ -63,6 +63,11 @@ happened, including real bugs found and fixed along the way. See
 - **Decision log:** [`docs/DECISIONS.md`](docs/DECISIONS.md) — every scope/architecture
   decision made on this project, with rationale and alternatives considered, kept current
   as the project progresses.
+- **Facility/tenant/access model:** [`docs/facility-tenant-model.md`](docs/facility-tenant-model.md)
+  — what `facility.type` (community/clinic/hospital) actually controls (almost nothing —
+  it's presentational; `accepting_referrals` and `tenant_id` are what matter), who can
+  create/read/update a facility, how every clinical table's tenant scoping actually chains
+  back through `facility_id`, and the current facility-vs-tenant RLS granularity gap.
 - **Changelog:** [`CHANGELOG.md`](CHANGELOG.md) — what's actually landed, in order.
 - **Implementation plans:** [`docs/superpowers/plans/`](docs/superpowers/plans/) — 8 plans
   covering the whole MVP: Backend Foundation, Episode & Task Management, Risk Scoring
