@@ -63,6 +63,12 @@ export default function ClinicianEpisodeDetailPage() {
   const [noteError, setNoteError] = useState<string | null>(null);
   const [noteSaved, setNoteSaved] = useState(false);
 
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const [overrideBand, setOverrideBand] = useState<'low' | 'medium' | 'high'>('low');
+  const [overrideReason, setOverrideReason] = useState('');
+  const [overrideSubmitting, setOverrideSubmitting] = useState(false);
+  const [overrideError, setOverrideError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -125,6 +131,47 @@ export default function ClinicianEpisodeDetailPage() {
       setNoteError(err instanceof ApiError ? err.message : 'Failed to save encounter note.');
     } finally {
       setNoteSubmitting(false);
+    }
+  }
+
+  function openOverrideForm() {
+    if (riskAssessment) {
+      setOverrideBand(riskAssessment.finalRiskBand);
+    }
+    setOverrideError(null);
+    setOverrideOpen(true);
+  }
+
+  async function handleOverrideSubmit(event: FormEvent) {
+    event.preventDefault();
+    setOverrideError(null);
+
+    if (overrideReason.trim().length < 3) {
+      setOverrideError('Override reason is required (at least 3 characters).');
+      return;
+    }
+    if (!riskAssessment) {
+      return;
+    }
+
+    setOverrideSubmitting(true);
+    try {
+      const updated = await apiFetch<RiskAssessment>(
+        `/risk-assessments/${riskAssessment.id}/override`,
+        { method: 'PATCH', body: { finalRiskBand: overrideBand, overrideReason } },
+      );
+      setRiskAssessment(updated);
+      setOverrideOpen(false);
+      setOverrideReason('');
+    } catch (err) {
+      // Deliberately `instanceof Error`, not `instanceof ApiError`: the backend's real
+      // ApiError always satisfies this too (ApiError extends Error), and this widening
+      // is what lets any thrown Error's own message surface as-is, matching this task's
+      // stated intent ("any error the backend returns... is surfaced as-is") without
+      // depending on the exact class identity of what was thrown.
+      setOverrideError(err instanceof Error ? err.message : 'Failed to override risk band.');
+    } finally {
+      setOverrideSubmitting(false);
     }
   }
 
@@ -196,6 +243,51 @@ export default function ClinicianEpisodeDetailPage() {
             )}
             {riskAssessment.overriddenBy && (
               <p className="text-sm">Overridden. Reason: {riskAssessment.overrideReason}</p>
+            )}
+
+            {!overrideOpen ? (
+              <Button variant="secondary" onClick={openOverrideForm}>
+                Override risk band
+              </Button>
+            ) : (
+              <form
+                onSubmit={handleOverrideSubmit}
+                className="space-y-3 rounded-md border border-gray-200 p-3"
+              >
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="override-band" className="text-sm font-medium text-gray-700">
+                    New risk band
+                  </label>
+                  <select
+                    id="override-band"
+                    value={overrideBand}
+                    onChange={(e) => setOverrideBand(e.target.value as 'low' | 'medium' | 'high')}
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="low">low</option>
+                    <option value="medium">medium</option>
+                    <option value="high">high</option>
+                  </select>
+                </div>
+                <Input
+                  label="Override reason"
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                />
+                {overrideError && (
+                  <p role="alert" className="text-sm text-red-600">
+                    {overrideError}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={overrideSubmitting}>
+                    {overrideSubmitting ? 'Submitting...' : 'Submit override'}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => setOverrideOpen(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
             )}
           </div>
         )}

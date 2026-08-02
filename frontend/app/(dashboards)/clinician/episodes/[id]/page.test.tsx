@@ -95,6 +95,89 @@ describe('ClinicianEpisodeDetailPage', () => {
     );
   });
 
+  it('requires an override reason before calling the API', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': SAMPLE_RISK_ASSESSMENT,
+      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+    await waitFor(() => expect(screen.getByText('Override risk band')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Override risk band'));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit override' }));
+
+    expect(await screen.findByText(/Override reason is required/)).toBeInTheDocument();
+    expect(mockedApiFetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('/override'),
+      expect.anything(),
+    );
+  });
+
+  it('submits a valid override and shows the updated band, status, and reason', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': SAMPLE_RISK_ASSESSMENT,
+      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+    await waitFor(() => expect(screen.getByText('Override risk band')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Override risk band'));
+
+    mockedApiFetch.mockResolvedValueOnce({
+      ...SAMPLE_RISK_ASSESSMENT,
+      finalRiskBand: 'medium',
+      status: 'Overridden',
+      overriddenBy: 'u1',
+      overrideReason: 'Clinical exam does not support high risk.',
+    });
+
+    fireEvent.change(screen.getByLabelText('New risk band'), { target: { value: 'medium' } });
+    fireEvent.change(screen.getByLabelText('Override reason'), {
+      target: { value: 'Clinical exam does not support high risk.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit override' }));
+
+    await waitFor(() =>
+      expect(mockedApiFetch).toHaveBeenCalledWith('/risk-assessments/ra1/override', {
+        method: 'PATCH',
+        body: { finalRiskBand: 'medium', overrideReason: 'Clinical exam does not support high risk.' },
+      }),
+    );
+    expect(
+      await screen.findByText('Overridden. Reason: Clinical exam does not support high risk.'),
+    ).toBeInTheDocument();
+  });
+
+  it('surfaces an error returned by the backend override call', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': SAMPLE_RISK_ASSESSMENT,
+      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+    await waitFor(() => expect(screen.getByText('Override risk band')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Override risk band'));
+
+    class OverrideApiError extends Error {
+      code = 'BAD_REQUEST';
+      details: unknown[] = [];
+      correlationId = 'corr-1';
+    }
+    mockedApiFetch.mockRejectedValueOnce(
+      new OverrideApiError('overrideReason must be longer than or equal to 3 characters'),
+    );
+
+    fireEvent.change(screen.getByLabelText('Override reason'), {
+      target: { value: 'Valid length reason passing client-side validation' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit override' }));
+
+    expect(
+      await screen.findByText('overrideReason must be longer than or equal to 3 characters'),
+    ).toBeInTheDocument();
+  });
+
   it('submits the encounter note with noteText and all four vitals fields, with no role branching', async () => {
     mockFetchByPath({
       '/pregnancy-episodes/e1/risk-assessments/latest': null,
