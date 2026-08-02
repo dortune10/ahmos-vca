@@ -72,4 +72,14 @@ describe('Nav', () => {
       '/clinician/referrals',
     );
   });
+
+  it('shows both supervisor nav links for a supervisor user', () => {
+    render(<Nav user={buildUser({ role: 'supervisor', fullName: 'Sup User' })} />);
+
+    expect(screen.getByRole('link', { name: 'KPIs' })).toHaveAttribute('href', '/supervisor');
+    expect(screen.getByRole('link', { name: 'Referral SLA' })).toHaveAttribute(
+      'href',
+      '/supervisor/referrals',
+    );
+  });
 });

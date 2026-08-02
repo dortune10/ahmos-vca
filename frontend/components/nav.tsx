@@ -19,7 +19,10 @@ const NAV_LINKS_BY_ROLE: Record<string, { href: string; label: string }[]> = {
     { href: '/clinician', label: 'Triage Board' },
     { href: '/clinician/referrals', label: 'Referrals' },
   ],
-  supervisor: [{ href: '/supervisor', label: 'KPIs' }],
+  supervisor: [
+    { href: '/supervisor', label: 'KPIs' },
+    { href: '/supervisor/referrals', label: 'Referral SLA' },
+  ],
   admin: [{ href: '/admin', label: 'Admin' }],
 };
 
