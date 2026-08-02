@@ -19,9 +19,19 @@ interface Episode {
   updatedAt: string;
 }
 
+interface Person {
+  id: string;
+  tenantId: string;
+  firstName: string;
+  lastName: string | null;
+  phonePrimary: string | null;
+  dateOfBirth: string | null;
+}
+
 export default function FrontlinePage() {
   const user = useCurrentUser();
   const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [personNames, setPersonNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,19 +43,36 @@ export default function FrontlinePage() {
     }
 
     let cancelled = false;
-    apiFetch<Episode[]>(`/pregnancy-episodes?facilityId=${user.facilityId}`)
-      .then((data) => {
-        if (!cancelled) setEpisodes(data);
-      })
-      .catch((err) => {
+
+    async function load() {
+      try {
+        const loadedEpisodes = await apiFetch<Episode[]>(
+          `/pregnancy-episodes?facilityId=${user.facilityId}`,
+        );
+        if (cancelled) return;
+        setEpisodes(loadedEpisodes);
+
+        const uniquePersonIds = Array.from(new Set(loadedEpisodes.map((e) => e.personId)));
+        if (uniquePersonIds.length === 0) {
+          return;
+        }
+        const persons = await apiFetch<Person[]>(`/persons?ids=${uniquePersonIds.join(',')}`);
+        if (cancelled) return;
+        const nameById: Record<string, string> = {};
+        for (const person of persons) {
+          nameById[person.id] = [person.firstName, person.lastName].filter(Boolean).join(' ');
+        }
+        setPersonNames(nameById);
+      } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : 'Failed to load caseload.');
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    }
 
+    load();
     return () => {
       cancelled = true;
     };
@@ -80,11 +107,7 @@ export default function FrontlinePage() {
               )}
               {episodes.map((episode) => (
                 <tr key={episode.id}>
-                  {/* KNOWN LIMITATION — see this task's write-up: EpisodeResponseDto only
-                      carries personId, and the identity API has no by-id or batch lookup,
-                      only GET /api/v1/persons?phone=. Showing a short reference instead of
-                      a name until that endpoint exists. */}
-                  <td>#{episode.personId.slice(-8)}</td>
+                  <td>{personNames[episode.personId] ?? `#${episode.personId.slice(-8)}`}</td>
                   <td>{episode.status}</td>
                   <td>{episode.riskBand ?? '—'}</td>
                   <td>{episode.estimatedDeliveryDate ?? '—'}</td>

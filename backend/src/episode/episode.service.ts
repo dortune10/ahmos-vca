@@ -26,6 +26,16 @@ export interface EpisodeLifecycleEventPayload {
   actorUserId: string;
 }
 
+// Naegele's rule: EDD = LMP + 280 days (40 weeks). Standard obstetric estimate used when no
+// more precise (e.g. ultrasound-confirmed) EDD is provided at registration. Uses UTC-based
+// date methods throughout -- setDate()/getDate() operate in the server's local timezone,
+// which would make this computation depend on wherever the process happens to be deployed.
+function estimateDeliveryDateFromLmp(lmpDate: string): string {
+  const date = new Date(lmpDate);
+  date.setUTCDate(date.getUTCDate() + 280);
+  return date.toISOString().slice(0, 10);
+}
+
 @Injectable()
 export class EpisodeService {
   constructor(
@@ -64,13 +74,16 @@ export class EpisodeService {
       throw new PersonNotFoundError(dto.personId);
     }
 
+    const estimatedDeliveryDate =
+      dto.estimatedDeliveryDate ?? (dto.lmpDate ? estimateDeliveryDateFromLmp(dto.lmpDate) : null);
+
     const { data, error } = await client
       .from('pregnancy_episode')
       .insert({
         person_id: dto.personId,
         facility_id: dto.facilityId,
         lmp_date: dto.lmpDate ?? null,
-        estimated_delivery_date: dto.estimatedDeliveryDate ?? null,
+        estimated_delivery_date: estimatedDeliveryDate,
         gestational_age_weeks: dto.gestationalAgeWeeks ?? null,
         status: 'Active',
       })

@@ -18,6 +18,17 @@ jest.mock('@/components/current-user-provider', () => ({
 const mockedApiFetch = apiFetch as jest.MockedFunction<typeof apiFetch>;
 const mockedUseCurrentUser = useCurrentUser as jest.MockedFunction<typeof useCurrentUser>;
 
+function mockFetchByPath(map: Record<string, unknown>) {
+  mockedApiFetch.mockImplementation((path: string) => {
+    for (const key of Object.keys(map)) {
+      if (path.startsWith(key)) {
+        return Promise.resolve(map[key]);
+      }
+    }
+    return Promise.reject(new Error(`unexpected path ${path}`));
+  });
+}
+
 describe('FrontlinePage', () => {
   beforeEach(() => {
     mockedApiFetch.mockReset();
@@ -31,28 +42,74 @@ describe('FrontlinePage', () => {
     });
   });
 
-  it('loads and renders the caseload for the current facility', async () => {
-    mockedApiFetch.mockResolvedValue([
-      {
-        id: 'e1',
-        personId: 'person-1234567890',
-        facilityId: 'f1',
-        lmpDate: null,
-        estimatedDeliveryDate: '2026-12-01',
-        gestationalAgeWeeks: 20,
-        riskBand: 'low',
-        status: 'Active',
-        createdAt: '2026-08-01T00:00:00.000Z',
-        updatedAt: '2026-08-01T00:00:00.000Z',
-      },
-    ]);
+  it('loads and renders the caseload for the current facility, showing names from the batch person lookup', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes': [
+        {
+          id: 'e1',
+          personId: 'person-1234567890',
+          facilityId: 'f1',
+          lmpDate: null,
+          estimatedDeliveryDate: '2026-12-01',
+          gestationalAgeWeeks: 20,
+          riskBand: 'low',
+          status: 'Active',
+          createdAt: '2026-08-01T00:00:00.000Z',
+          updatedAt: '2026-08-01T00:00:00.000Z',
+        },
+      ],
+      '/persons': [
+        {
+          id: 'person-1234567890',
+          tenantId: 't1',
+          firstName: 'Amara',
+          lastName: 'Okafor',
+          phonePrimary: null,
+          dateOfBirth: null,
+        },
+      ],
+    });
 
     render(<FrontlinePage />);
 
     expect(screen.getByText('Loading caseload...')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText('#34567890')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Amara Okafor')).toBeInTheDocument());
     expect(mockedApiFetch).toHaveBeenCalledWith('/pregnancy-episodes?facilityId=f1');
+    expect(mockedApiFetch).toHaveBeenCalledWith('/persons?ids=person-1234567890');
     expect(screen.getByText('low')).toBeInTheDocument();
+  });
+
+  it('falls back to a short reference when the person lookup has no match yet', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes': [
+        {
+          id: 'e1',
+          personId: 'person-1234567890',
+          facilityId: 'f1',
+          lmpDate: null,
+          estimatedDeliveryDate: '2026-12-01',
+          gestationalAgeWeeks: 20,
+          riskBand: 'low',
+          status: 'Active',
+          createdAt: '2026-08-01T00:00:00.000Z',
+          updatedAt: '2026-08-01T00:00:00.000Z',
+        },
+      ],
+      '/persons': [],
+    });
+
+    render(<FrontlinePage />);
+
+    await waitFor(() => expect(screen.getByText('#34567890')).toBeInTheDocument());
+  });
+
+  it('skips the person-lookup call when the facility has no episodes', async () => {
+    mockedApiFetch.mockResolvedValueOnce([]);
+
+    render(<FrontlinePage />);
+
+    await waitFor(() => expect(screen.getByText('No episodes yet.')).toBeInTheDocument());
+    expect(mockedApiFetch).toHaveBeenCalledTimes(1);
   });
 
   it('shows a message and never calls the API when the user has no facility assigned', async () => {

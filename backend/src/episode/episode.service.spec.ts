@@ -101,6 +101,64 @@ describe('EpisodeService', () => {
       });
     });
 
+    it('computes estimatedDeliveryDate from lmpDate via Naegele\'s rule (LMP + 280 days) when no EDD is given', async () => {
+      const supabaseService = {
+        getClientForUser: () => buildCreateClient({ personExists: true }),
+      } as unknown as SupabaseService;
+      const auditService = { log: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService;
+      const tasksService = {
+        generateInitialAncSchedule: jest.fn().mockResolvedValue([]),
+      } as unknown as TasksService;
+      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+
+      const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
+      const result = await service.create('jwt', 'u1', 't1', {
+        personId: 'p1',
+        facilityId: 'f1',
+        lmpDate: '2026-03-15',
+      });
+
+      expect(result.lmpDate).toBe('2026-03-15');
+      expect(result.estimatedDeliveryDate).toBe('2026-12-20');
+    });
+
+    it('uses an explicitly provided estimatedDeliveryDate over the LMP-derived one', async () => {
+      const supabaseService = {
+        getClientForUser: () => buildCreateClient({ personExists: true }),
+      } as unknown as SupabaseService;
+      const auditService = { log: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService;
+      const tasksService = {
+        generateInitialAncSchedule: jest.fn().mockResolvedValue([]),
+      } as unknown as TasksService;
+      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+
+      const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
+      const result = await service.create('jwt', 'u1', 't1', {
+        personId: 'p1',
+        facilityId: 'f1',
+        lmpDate: '2026-03-15',
+        estimatedDeliveryDate: '2026-12-25',
+      });
+
+      expect(result.estimatedDeliveryDate).toBe('2026-12-25');
+    });
+
+    it('leaves estimatedDeliveryDate null when neither LMP nor EDD is given', async () => {
+      const supabaseService = {
+        getClientForUser: () => buildCreateClient({ personExists: true }),
+      } as unknown as SupabaseService;
+      const auditService = { log: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService;
+      const tasksService = {
+        generateInitialAncSchedule: jest.fn().mockResolvedValue([]),
+      } as unknown as TasksService;
+      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+
+      const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
+      const result = await service.create('jwt', 'u1', 't1', { personId: 'p1', facilityId: 'f1' });
+
+      expect(result.estimatedDeliveryDate).toBeNull();
+    });
+
     it('throws PersonNotFoundError and never inserts an episode when the person does not exist', async () => {
       const supabaseService = {
         getClientForUser: () => buildCreateClient({ personExists: false }),
