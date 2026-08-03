@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { IdentityService, DuplicatePersonError } from './identity.service';
+import { IdentityService, DuplicatePersonError, AmbiguousPersonMatchError } from './identity.service';
 import { SupabaseService } from '../common/supabase/supabase.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -131,5 +131,129 @@ describe('IdentityService', () => {
 
     expect(result).toEqual([]);
     expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  describe('findByPhoneAsSystem', () => {
+    const inMock = jest.fn();
+
+    function buildServiceWithServiceClient(rows: any[]) {
+      inMock.mockReset();
+      inMock.mockResolvedValue({ data: rows, error: null });
+      const serviceClient = {
+        from: () => ({
+          select: () => ({
+            in: inMock,
+          }),
+        }),
+      };
+      const supabaseService = {
+        getServiceClient: () => serviceClient,
+      } as unknown as SupabaseService;
+      const auditService = { log: jest.fn() } as unknown as AuditService;
+      return new IdentityService(supabaseService, auditService);
+    }
+
+    it('returns null when no person matches the phone number', async () => {
+      const service = buildServiceWithServiceClient([]);
+      const result = await service.findByPhoneAsSystem('+254700000099');
+      expect(result).toBeNull();
+    });
+
+    // Meta sends the wa_id with no leading '+'; person.phone_primary is stored with one.
+    // This is the single most important assertion in this file — see the "Phone format"
+    // note above.
+    it('matches a +E.164 stored row when given bare wa_id digits, and queries both forms', async () => {
+      const service = buildServiceWithServiceClient([
+        { id: 'p1', tenant_id: 't1', first_name: 'Amina', phone_primary: '+254700000001' },
+      ]);
+
+      const result = await service.findByPhoneAsSystem('254700000001');
+
+      expect(result?.id).toBe('p1');
+      expect(inMock).toHaveBeenCalledWith('phone_primary', ['+254700000001', '254700000001']);
+    });
+
+    it('strips spaces, dashes and parentheses before matching', async () => {
+      const service = buildServiceWithServiceClient([
+        { id: 'p1', tenant_id: 't1', first_name: 'Amina', phone_primary: '+254700000001' },
+      ]);
+
+      await service.findByPhoneAsSystem('+254 (700) 000-001');
+
+      expect(inMock).toHaveBeenCalledWith('phone_primary', ['+254700000001', '254700000001']);
+    });
+
+    it('returns the matching person, including consent fields', async () => {
+      const service = buildServiceWithServiceClient([
+        {
+          id: 'p1',
+          tenant_id: 't1',
+          first_name: 'Amina',
+          last_name: null,
+          phone_primary: '+254700000001',
+          date_of_birth: null,
+          whatsapp_consent: true,
+          whatsapp_consent_at: '2026-08-01T00:00:00.000Z',
+        },
+      ]);
+      const result = await service.findByPhoneAsSystem('+254700000001');
+      expect(result?.id).toBe('p1');
+      expect(result?.whatsappConsent).toBe(true);
+      expect(result?.whatsappConsentAt).toBe('2026-08-01T00:00:00.000Z');
+    });
+
+    it('throws AmbiguousPersonMatchError when more than one person matches', async () => {
+      const service = buildServiceWithServiceClient([
+        { id: 'p1', tenant_id: 't1', first_name: 'Amina', phone_primary: '+254700000001' },
+        { id: 'p2', tenant_id: 't2', first_name: 'Beatrice', phone_primary: '+254700000001' },
+      ]);
+      await expect(service.findByPhoneAsSystem('+254700000001')).rejects.toThrow(
+        AmbiguousPersonMatchError,
+      );
+    });
+  });
+
+  describe('markWhatsAppConsentAsSystem', () => {
+    it('updates whatsapp_consent and whatsapp_consent_at on the person row', async () => {
+      const updateMock = jest.fn().mockReturnValue({
+        eq: jest.fn().mockResolvedValue({ error: null }),
+      });
+      const serviceClient = { from: () => ({ update: updateMock }) };
+      const supabaseService = {
+        getServiceClient: () => serviceClient,
+      } as unknown as SupabaseService;
+      const auditService = { log: jest.fn() } as unknown as AuditService;
+      const service = new IdentityService(supabaseService, auditService);
+
+      await service.markWhatsAppConsentAsSystem('p1', '2026-08-01T00:00:00.000Z');
+
+      expect(updateMock).toHaveBeenCalledWith({
+        whatsapp_consent: true,
+        whatsapp_consent_at: '2026-08-01T00:00:00.000Z',
+        updated_at: expect.any(String),
+      });
+    });
+  });
+
+  describe('revokeWhatsAppConsentAsSystem', () => {
+    it('clears whatsapp_consent and whatsapp_consent_at on the person row', async () => {
+      const updateMock = jest.fn().mockReturnValue({
+        eq: jest.fn().mockResolvedValue({ error: null }),
+      });
+      const serviceClient = { from: () => ({ update: updateMock }) };
+      const supabaseService = {
+        getServiceClient: () => serviceClient,
+      } as unknown as SupabaseService;
+      const auditService = { log: jest.fn() } as unknown as AuditService;
+      const service = new IdentityService(supabaseService, auditService);
+
+      await service.revokeWhatsAppConsentAsSystem('p1');
+
+      expect(updateMock).toHaveBeenCalledWith({
+        whatsapp_consent: false,
+        whatsapp_consent_at: null,
+        updated_at: expect.any(String),
+      });
+    });
   });
 });
