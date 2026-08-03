@@ -1,11 +1,23 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getCurrentAppUser } from '@/lib/current-user';
 import { ROLE_HOME_ROUTE } from '@/lib/role-routing';
+import { LandingPage } from '@/components/landing/landing-page';
+
+export const metadata: Metadata = {
+  title: 'AMHOS — Maternal and newborn care coordination',
+  description:
+    'AMHOS is a care-coordination platform for maternal and newborn health in low-resource settings. Community health workers, midwives, clinicians and district supervisors work from one shared record, from pregnancy registration through referral to postnatal follow-up.',
+};
 
 export default async function RootPage() {
   const user = await getCurrentAppUser();
+
+  // Unauthenticated visitors get the public landing page. Signed-in staff must never see
+  // it: the role redirect below is the load-bearing behaviour of this route and predates
+  // the landing page entirely.
   if (!user) {
-    redirect('/login');
+    return <LandingPage />;
   }
 
   const homeRoute = ROLE_HOME_ROUTE[user.role];
