@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { useCurrentUser } from '@/components/current-user-provider';
 import { Card } from '@/components/ui/card';
@@ -107,7 +108,17 @@ export default function FrontlinePage() {
               )}
               {episodes.map((episode) => (
                 <tr key={episode.id}>
-                  <td>{personNames[episode.personId] ?? `#${episode.personId.slice(-8)}`}</td>
+                  <td>
+                    {/* The person's name is the row's link target: opening a caseload row
+                        leads to that episode's frontline view, which is where notes are read
+                        and from which the encounter-note form is one further click. */}
+                    <Link
+                      href={`/frontline/episodes/${episode.id}`}
+                      className="font-medium text-gray-900 underline underline-offset-2 hover:text-gray-700"
+                    >
+                      {personNames[episode.personId] ?? `#${episode.personId.slice(-8)}`}
+                    </Link>
+                  </td>
                   <td>{episode.status}</td>
                   <td>{episode.riskBand ?? '—'}</td>
                   <td>{episode.estimatedDeliveryDate ?? '—'}</td>

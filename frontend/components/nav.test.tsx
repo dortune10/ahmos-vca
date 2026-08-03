@@ -41,6 +41,36 @@ describe('Nav', () => {
     expect(screen.queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument();
   });
 
+  // Patient registration is the single most important thing a CHW does, and /frontline/register
+  // was previously unreachable — the page existed but nothing in the app linked to it.
+  it.each(['chw', 'nurse'])('gives a %s a Register link to /frontline/register', (role) => {
+    render(<Nav user={buildUser({ role })} />);
+
+    expect(screen.getByRole('link', { name: 'Register' })).toHaveAttribute(
+      'href',
+      '/frontline/register',
+    );
+  });
+
+  it('keeps the existing frontline links alongside the new Register link', () => {
+    render(<Nav user={buildUser({ role: 'nurse' })} />);
+
+    expect(screen.getByRole('link', { name: 'Caseload' })).toHaveAttribute('href', '/frontline');
+    expect(screen.getByRole('link', { name: 'Visit Checklist' })).toHaveAttribute(
+      'href',
+      '/frontline/tasks',
+    );
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  it('does not give a Register link to roles that do not register patients', () => {
+    for (const role of ['clinician', 'supervisor', 'admin']) {
+      const { unmount } = render(<Nav user={buildUser({ role })} />);
+      expect(screen.queryByRole('link', { name: 'Register' })).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
   it('shows the admin link and full name for an admin user', () => {
     render(<Nav user={buildUser({ role: 'admin', fullName: 'Admin User' })} />);
 

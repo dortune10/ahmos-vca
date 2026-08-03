@@ -200,6 +200,45 @@ export class EpisodeService {
     return EpisodeResponseDto.fromRow(data);
   }
 
+  // Read path for the clinical narrative that recordEncounterNote() writes. Until this
+  // existed, encounter_note was write-only from the application's perspective: the only
+  // other reader is RiskService, which pulls vitals_json off the single latest note for
+  // scoring and never surfaces note_text to a human.
+  //
+  // Ordered by recorded_at (the clinical event time the UI labels each note with), not
+  // created_at (the row's insert time). They are equal today because recordEncounterNote()
+  // lets both default to now(), but recorded_at is the column that would carry a
+  // back-dated visit if retrospective entry is ever added, so ordering on it is the
+  // definition that stays correct.
+  async listEncounterNotes(jwt: string, episodeId: string): Promise<EncounterNoteResponseDto[]> {
+    const client = this.supabaseService.getClientForUser(jwt);
+
+    // Resolve the episode first so an unknown or out-of-tenant episode id produces
+    // EPISODE_NOT_FOUND rather than a silently empty list. The encounter_note select policy
+    // is tenant-scoped, so querying notes directly for another tenant's episode returns []
+    // — indistinguishable from "this episode genuinely has no notes yet", which is a
+    // dangerous ambiguity to show a clinician.
+    const { data: episode, error: episodeError } = await client
+      .from('pregnancy_episode')
+      .select('id')
+      .eq('id', episodeId)
+      .single();
+    if (episodeError || !episode) {
+      throw new EpisodeNotFoundError(episodeId);
+    }
+
+    const { data, error } = await client
+      .from('encounter_note')
+      .select('*')
+      .eq('pregnancy_episode_id', episodeId)
+      .order('recorded_at', { ascending: false });
+    if (error) {
+      throw error;
+    }
+
+    return (data ?? []).map(EncounterNoteResponseDto.fromRow);
+  }
+
   async getById(jwt: string, episodeId: string): Promise<EpisodeResponseDto> {
     const client = this.supabaseService.getClientForUser(jwt);
     const { data, error } = await client

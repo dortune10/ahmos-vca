@@ -21,6 +21,22 @@ describe('resolveRedirectForRole', () => {
     expect(resolveRedirectForRole('/clinician', 'nurse')).toBe('/frontline');
   });
 
+  // Nurses need referral creation, which used to exist only on the clinician episode page.
+  // That was fixed by rendering the shared ReferralCreateForm on the frontline episode page,
+  // NOT by punching a hole in this rule — the clinician episode page also carries the
+  // risk-band override, which is not a nurse action. This asserts the hole stayed closed.
+  it('keeps a nurse out of the clinician episode page even though nurses may create referrals', () => {
+    expect(resolveRedirectForRole('/clinician/episodes/e1', 'nurse')).toBe('/frontline');
+  });
+
+  it('lets a nurse reach the frontline episode page that hosts referral creation', () => {
+    expect(resolveRedirectForRole('/frontline/episodes/e1', 'nurse')).toBeNull();
+  });
+
+  it('lets a chw reach the frontline episode page (referral creation is gated in the page, not the router)', () => {
+    expect(resolveRedirectForRole('/frontline/episodes/e1', 'chw')).toBeNull();
+  });
+
   it('redirects an admin hitting a non-admin route back to /admin', () => {
     expect(resolveRedirectForRole('/frontline', 'admin')).toBe('/admin');
   });

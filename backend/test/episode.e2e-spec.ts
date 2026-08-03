@@ -30,4 +30,20 @@ describe('EpisodeController (e2e)', () => {
   it('rejects episode listing with no auth token', () => {
     return request(app.getHttpServer()).get('/api/v1/pregnancy-episodes').expect(401);
   });
+
+  it('rejects reading an episode\'s encounter notes with no auth token', () => {
+    return request(app.getHttpServer())
+      .get('/api/v1/pregnancy-episodes/11111111-1111-1111-1111-111111111111/encounter-notes')
+      .expect(401);
+  });
+
+  // The GET and POST forms of :id/encounter-notes share a path, and @Get(':id') is declared
+  // before them in the controller. This asserts the GET resolves to its own handler (401
+  // from AuthGuard) rather than being swallowed by the single-segment :id route.
+  it('routes GET :id/encounter-notes to its own handler, not the @Get(":id") route', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/pregnancy-episodes/11111111-1111-1111-1111-111111111111/encounter-notes')
+      .send();
+    expect(response.status).not.toBe(404);
+  });
 });

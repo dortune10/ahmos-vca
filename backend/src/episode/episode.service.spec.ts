@@ -446,4 +446,128 @@ describe('EpisodeService', () => {
       expect(eqMock).toHaveBeenCalledWith('facility_id', 'f1');
     });
   });
+
+  function buildEncounterNoteListClient(options: { episodeFound: boolean; rows?: any[] }) {
+    const orderMock = jest.fn();
+    const noteEqMock = jest.fn();
+    return {
+      orderMock,
+      noteEqMock,
+      client: {
+        from: (table: string) => {
+          if (table === 'pregnancy_episode') {
+            return {
+              select: () => ({
+                eq: () => ({
+                  single: async () =>
+                    options.episodeFound
+                      ? { data: { id: 'e1' }, error: null }
+                      : { data: null, error: { message: 'no rows' } },
+                }),
+              }),
+            };
+          }
+          if (table === 'encounter_note') {
+            return {
+              select: () => ({
+                eq: (...eqArgs: any[]) => {
+                  noteEqMock(...eqArgs);
+                  return {
+                    order: async (...orderArgs: any[]) => {
+                      orderMock(...orderArgs);
+                      return { data: options.rows ?? [], error: null };
+                    },
+                  };
+                },
+              }),
+            };
+          }
+          throw new Error(`unexpected table ${table}`);
+        },
+      },
+    };
+  }
+
+  function buildNoOpDeps() {
+    return {
+      auditService: { log: jest.fn() } as unknown as AuditService,
+      tasksService: { generateInitialAncSchedule: jest.fn() } as unknown as TasksService,
+      eventEmitter: { emit: jest.fn() } as unknown as EventEmitter2,
+    };
+  }
+
+  describe('listEncounterNotes', () => {
+    it('returns the episode notes mapped through EncounterNoteResponseDto', async () => {
+      const { client } = buildEncounterNoteListClient({
+        episodeFound: true,
+        rows: [
+          {
+            id: 'n1',
+            pregnancy_episode_id: 'e1',
+            recorded_by: 'u1',
+            recorded_at: '2026-08-02T00:00:00.000Z',
+            note_text: 'Second visit, patient stable.',
+            vitals_json: { bpSystolic: 118, bpDiastolic: 76 },
+            created_at: '2026-08-02T00:00:00.000Z',
+          },
+          {
+            id: 'n2',
+            pregnancy_episode_id: 'e1',
+            recorded_by: 'u1',
+            recorded_at: '2026-08-01T00:00:00.000Z',
+            note_text: 'First visit.',
+            vitals_json: null,
+            created_at: '2026-08-01T00:00:00.000Z',
+          },
+        ],
+      });
+      const supabaseService = { getClientForUser: () => client } as unknown as SupabaseService;
+      const { auditService, tasksService, eventEmitter } = buildNoOpDeps();
+
+      const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
+      const result = await service.listEncounterNotes('jwt', 'e1');
+
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('n1');
+      expect(result[0].noteText).toBe('Second visit, patient stable.');
+      expect(result[0].vitals).toEqual({ bpSystolic: 118, bpDiastolic: 76 });
+      expect(result[1].vitals).toBeNull();
+    });
+
+    it('scopes the query to the episode and orders newest-first', async () => {
+      const { client, orderMock, noteEqMock } = buildEncounterNoteListClient({ episodeFound: true });
+      const supabaseService = { getClientForUser: () => client } as unknown as SupabaseService;
+      const { auditService, tasksService, eventEmitter } = buildNoOpDeps();
+
+      const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
+      await service.listEncounterNotes('jwt', 'e1');
+
+      expect(noteEqMock).toHaveBeenCalledWith('pregnancy_episode_id', 'e1');
+      expect(orderMock).toHaveBeenCalledWith('recorded_at', { ascending: false });
+    });
+
+    it('returns an empty array when the episode has no notes yet', async () => {
+      const { client } = buildEncounterNoteListClient({ episodeFound: true, rows: [] });
+      const supabaseService = { getClientForUser: () => client } as unknown as SupabaseService;
+      const { auditService, tasksService, eventEmitter } = buildNoOpDeps();
+
+      const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
+
+      await expect(service.listEncounterNotes('jwt', 'e1')).resolves.toEqual([]);
+    });
+
+    // Guards the ambiguity called out in listEncounterNotes(): the tenant-scoped RLS select
+    // policy makes another tenant's episode return [] rather than error, so without the
+    // episode existence check a clinician would be shown "no notes recorded" for a record
+    // they simply cannot see.
+    it('throws EpisodeNotFoundError instead of an empty list when the episode is not visible', async () => {
+      const { client } = buildEncounterNoteListClient({ episodeFound: false });
+      const supabaseService = { getClientForUser: () => client } as unknown as SupabaseService;
+      const { auditService, tasksService, eventEmitter } = buildNoOpDeps();
+
+      const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
+
+      await expect(service.listEncounterNotes('jwt', 'missing')).rejects.toThrow(EpisodeNotFoundError);
+    });
+  });
 });

@@ -79,6 +79,67 @@ describe('FrontlinePage', () => {
     expect(screen.getByText('low')).toBeInTheDocument();
   });
 
+  // The caseload used to render plain text cells, leaving no way to reach an episode at all —
+  // and therefore no way to construct the encounter-note URL, which needs an episode id.
+  it('links each caseload row to that episode\'s frontline view', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes': [
+        {
+          id: 'e1',
+          personId: 'person-1234567890',
+          facilityId: 'f1',
+          lmpDate: null,
+          estimatedDeliveryDate: '2026-12-01',
+          gestationalAgeWeeks: 20,
+          riskBand: 'low',
+          status: 'Active',
+          createdAt: '2026-08-01T00:00:00.000Z',
+          updatedAt: '2026-08-01T00:00:00.000Z',
+        },
+      ],
+      '/persons': [
+        {
+          id: 'person-1234567890',
+          tenantId: 't1',
+          firstName: 'Amara',
+          lastName: 'Okafor',
+          phonePrimary: null,
+          dateOfBirth: null,
+        },
+      ],
+    });
+
+    render(<FrontlinePage />);
+
+    const link = await screen.findByRole('link', { name: 'Amara Okafor' });
+    expect(link).toHaveAttribute('href', '/frontline/episodes/e1');
+  });
+
+  it('still links the row when the person name has not resolved', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes': [
+        {
+          id: 'e9',
+          personId: 'person-1234567890',
+          facilityId: 'f1',
+          lmpDate: null,
+          estimatedDeliveryDate: null,
+          gestationalAgeWeeks: null,
+          riskBand: null,
+          status: 'Active',
+          createdAt: '2026-08-01T00:00:00.000Z',
+          updatedAt: '2026-08-01T00:00:00.000Z',
+        },
+      ],
+      '/persons': [],
+    });
+
+    render(<FrontlinePage />);
+
+    const link = await screen.findByRole('link', { name: '#34567890' });
+    expect(link).toHaveAttribute('href', '/frontline/episodes/e9');
+  });
+
   it('falls back to a short reference when the person lookup has no match yet', async () => {
     mockFetchByPath({
       '/pregnancy-episodes': [

@@ -9,10 +9,12 @@ import { Button } from '@/components/ui/button';
 const NAV_LINKS_BY_ROLE: Record<string, { href: string; label: string }[]> = {
   chw: [
     { href: '/frontline', label: 'Caseload' },
+    { href: '/frontline/register', label: 'Register' },
     { href: '/frontline/tasks', label: 'Visit Checklist' },
   ],
   nurse: [
     { href: '/frontline', label: 'Caseload' },
+    { href: '/frontline/register', label: 'Register' },
     { href: '/frontline/tasks', label: 'Visit Checklist' },
   ],
   clinician: [

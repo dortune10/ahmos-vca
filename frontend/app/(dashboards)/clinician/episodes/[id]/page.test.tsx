@@ -60,10 +60,20 @@ const SAMPLE_FACILITIES = [
 ];
 
 function mockFetchByPath(map: Record<string, unknown>) {
+  const entries = Object.entries({
+    // Every render of this page now mounts EncounterNoteList, which fetches the episode's
+    // notes. Defaulted to empty so existing cases need not declare it; a case that asserts
+    // on the note list overrides it.
+    '/pregnancy-episodes/e1/encounter-notes': [],
+    ...map,
+    // Longest key first, so a specific path (`.../e1/encounter-notes`) wins over its own
+    // prefix (`.../e1`) no matter what order the caller listed them in.
+  }).sort(([a], [b]) => b.length - a.length);
+
   mockedApiFetch.mockImplementation((path: string) => {
-    for (const key of Object.keys(map)) {
+    for (const [key, value] of entries) {
       if (path.startsWith(key)) {
-        return Promise.resolve(map[key]);
+        return Promise.resolve(value);
       }
     }
     return Promise.reject(new Error(`unexpected path ${path}`));
@@ -341,5 +351,63 @@ describe('ClinicianEpisodeDetailPage', () => {
 
     expect(await screen.findByText('Select a receiving facility.')).toBeInTheDocument();
     expect(mockedApiFetch).not.toHaveBeenCalledWith('/referrals', expect.anything());
+  });
+
+  it('reads previously recorded encounter notes back onto the page', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': null,
+      '/pregnancy-episodes/e1/encounter-notes': [
+        {
+          id: 'n1',
+          pregnancyEpisodeId: 'e1',
+          recordedBy: 'u1',
+          recordedAt: '2026-08-02T09:00:00.000Z',
+          noteText: 'Patient reports headache and blurred vision.',
+          vitals: { bpSystolic: 160, bpDiastolic: 100, temperatureC: null, hemoglobinGdl: null },
+          createdAt: '2026-08-02T09:00:00.000Z',
+        },
+      ],
+      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+      '/facilities': SAMPLE_FACILITIES,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+
+    expect(
+      await screen.findByText('Patient reports headache and blurred vision.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/BP systolic 160 mmHg/)).toBeInTheDocument();
+    expect(mockedApiFetch).toHaveBeenCalledWith('/pregnancy-episodes/e1/encounter-notes');
+  });
+
+  it('refreshes the notes list after saving a note so the new note is visible without a reload', async () => {
+    mockFetchByPath({
+      '/pregnancy-episodes/e1/risk-assessments/latest': null,
+      '/pregnancy-episodes/e1': SAMPLE_EPISODE,
+      '/facilities': SAMPLE_FACILITIES,
+    });
+
+    render(<ClinicianEpisodeDetailPage />);
+    await waitFor(() => expect(screen.getByLabelText('Note')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('No encounter notes recorded yet.')).toBeInTheDocument(),
+    );
+
+    const notesCallsBefore = mockedApiFetch.mock.calls.filter(
+      ([path]) => path === '/pregnancy-episodes/e1/encounter-notes',
+    ).length;
+
+    mockedApiFetch.mockResolvedValueOnce({ id: 'note-1' });
+    fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'Follow-up recorded.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
+
+    await waitFor(() => expect(screen.getByText('Encounter note saved.')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        mockedApiFetch.mock.calls.filter(
+          ([path]) => path === '/pregnancy-episodes/e1/encounter-notes',
+        ).length,
+      ).toBeGreaterThan(notesCallsBefore),
+    );
   });
 });

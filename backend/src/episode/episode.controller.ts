@@ -55,6 +55,20 @@ export class EpisodeController {
     }
   }
 
+  @Get(':id/encounter-notes')
+  async listEncounterNotes(@CurrentUser() user: CurrentUserPayload, @Param('id') id: string) {
+    try {
+      return await this.episodeService.listEncounterNotes(user.jwt, id);
+    } catch (err) {
+      if (err instanceof EpisodeNotFoundError) {
+        throw new NotFoundException({
+          error: { code: 'EPISODE_NOT_FOUND', message: err.message, details: [] },
+        });
+      }
+      throw err;
+    }
+  }
+
   @Post(':id/encounter-notes')
   async recordEncounterNote(
     @CurrentUser() user: CurrentUserPayload,
