@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { apiFetch, ApiError } from '@/lib/api-client';
-import { Card } from '@/components/ui/card';
+import { Card, CardTitle } from '@/components/ui/card';
+import { Notice } from '@/components/ui/notice';
 
 export interface EncounterNoteVitals {
   bpSystolic?: number | null;
@@ -85,29 +86,46 @@ export function EncounterNoteList({
 
   return (
     <Card>
-      <h2 className="text-lg font-medium">Encounter Notes</h2>
-      {loading && <p className="text-sm text-gray-500">Loading encounter notes...</p>}
-      {error && (
-        <p role="alert" className="text-sm text-red-600">
-          {error}
+      <CardTitle>Encounter Notes</CardTitle>
+      {loading && (
+        <p className="mt-3 font-data text-xs uppercase tracking-[0.14em] text-ink-muted">
+          Loading encounter notes...
         </p>
       )}
+      {error && (
+        <Notice tone="error" className="mt-3">
+          {error}
+        </Notice>
+      )}
       {!loading && !error && notes.length === 0 && (
-        <p className="text-sm text-gray-500">No encounter notes recorded yet.</p>
+        <p className="mt-3 text-sm text-ink-muted">No encounter notes recorded yet.</p>
       )}
       {!loading && !error && notes.length > 0 && (
-        <ol className="divide-y divide-gray-200">
+        // A visit history is a ledger, so it reads as ruled entries rather than as cards:
+        // the timestamp is the index, the narrative is the entry, the vitals are the figures.
+        <ol className="mt-4 divide-y divide-paper-rule border-t border-paper-rule">
           {notes.map((note) => {
             const vitalsSummary = formatVitals(note.vitals);
             return (
-              <li key={note.id} className="space-y-1 py-3 first:pt-0 last:pb-0">
-                <p className="text-xs text-gray-500">{new Date(note.recordedAt).toLocaleString()}</p>
+              <li key={note.id} className="py-3.5 first:pt-3 last:pb-0">
+                <p className="font-data text-[0.625rem] uppercase leading-4 tracking-[0.14em] text-ink-muted">
+                  {new Date(note.recordedAt).toLocaleString()}
+                </p>
                 {note.noteText ? (
-                  <p className="whitespace-pre-wrap text-sm text-gray-900">{note.noteText}</p>
+                  <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                    {note.noteText}
+                  </p>
                 ) : (
-                  <p className="text-sm italic text-gray-500">No narrative recorded.</p>
+                  <p className="mt-1.5 text-sm italic text-ink-muted">No narrative recorded.</p>
                 )}
-                {vitalsSummary && <p className="text-sm text-gray-700">{vitalsSummary}</p>}
+                {/* Vitals stay one string in one element — `formatVitals` is what the tests
+                    assert against, and a reading split across chips would break the record
+                    into fragments a clinician has to reassemble. */}
+                {vitalsSummary && (
+                  <p className="mt-2 font-data text-xs leading-relaxed text-ink-soft">
+                    {vitalsSummary}
+                  </p>
+                )}
               </li>
             );
           })}

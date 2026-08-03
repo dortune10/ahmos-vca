@@ -5,6 +5,9 @@ import { apiFetch, ApiError } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { Notice } from '@/components/ui/notice';
+import { PageHeader } from '@/components/ui/page-header';
+import { Select } from '@/components/ui/select';
 import { Table } from '@/components/ui/table';
 
 interface Facility {
@@ -78,24 +81,29 @@ export default function FacilitiesPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-xl font-semibold">Facilities</h1>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Whole tenant"
+        title="Facilities"
+        description="Every facility in your tenant. Only facilities currently accepting referrals can be chosen as the destination of a new referral."
+      />
 
-      {error && <p role="alert">{error}</p>}
+      {error && <Notice tone="error">{error}</Notice>}
 
       <Card>
         <form onSubmit={handleCreate} className="space-y-4" aria-label="Create facility">
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
-          <label>
-            Type
-            <select value={type} onChange={(e) => setType(e.target.value as Facility['type'])}>
-              {FACILITY_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select
+            label="Type"
+            value={type}
+            onChange={(e) => setType(e.target.value as Facility['type'])}
+          >
+            {FACILITY_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </Select>
           <Input
             label="Contact phone"
             value={contactPhone}
@@ -108,34 +116,70 @@ export default function FacilitiesPage() {
       </Card>
 
       {loading ? (
-        <p>Loading facilities...</p>
+        <p className="font-data text-xs uppercase tracking-[0.14em] text-ink-muted">
+          Loading facilities...
+        </p>
       ) : (
-        <Table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Contact phone</th>
-              <th>Accepting referrals</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {facilities.map((facility) => (
-              <tr key={facility.id}>
-                <td>{facility.name}</td>
-                <td>{facility.type}</td>
-                <td>{facility.contactPhone ?? '—'}</td>
-                <td>{facility.acceptingReferrals ? 'Yes' : 'No'}</td>
-                <td>
-                  <Button onClick={() => handleToggleAcceptingReferrals(facility)}>
-                    {facility.acceptingReferrals ? 'Stop accepting' : 'Start accepting'}
-                  </Button>
-                </td>
+        <Card>
+          <Table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Contact phone</th>
+                <th>Accepting referrals</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
+            </thead>
+            <tbody>
+              {facilities.length === 0 && (
+                <tr>
+                  <td colSpan={5}>
+                    <span className="block py-4 text-ink-muted">
+                      No facilities yet. Create the first one above.
+                    </span>
+                  </td>
+                </tr>
+              )}
+              {facilities.map((facility) => (
+                <tr key={facility.id}>
+                  <td className="font-medium text-ink">{facility.name}</td>
+                  <td>
+                    <span className="font-data text-xs uppercase tracking-[0.08em] text-ink-soft">
+                      {facility.type}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="whitespace-nowrap font-data text-xs text-ink">
+                      {facility.contactPhone ?? '—'}
+                    </span>
+                  </td>
+                  {/* Referral availability is an operational state, not a clinical risk band,
+                      so it is marked by weight and rule rather than by hue. */}
+                  <td>
+                    <span
+                      className={`font-data text-xs uppercase tracking-[0.08em] ${
+                        facility.acceptingReferrals
+                          ? 'border-l-2 border-ink pl-1.5 font-medium text-ink'
+                          : 'text-ink-muted'
+                      }`}
+                    >
+                      {facility.acceptingReferrals ? 'Yes' : 'No'}
+                    </span>
+                  </td>
+                  <td>
+                    <Button
+                      variant="secondary"
+                      onClick={() => handleToggleAcceptingReferrals(facility)}
+                    >
+                      {facility.acceptingReferrals ? 'Stop accepting' : 'Start accepting'}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
       )}
     </div>
   );

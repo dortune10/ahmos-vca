@@ -7,6 +7,8 @@ import { useCurrentUser } from '@/components/current-user-provider';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
+import { PageHeader } from '@/components/ui/page-header';
 
 interface VitalsInput {
   bpSystolic?: number;
@@ -65,43 +67,55 @@ export default function EncounterNotePage() {
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Encounter Note</h1>
+    <div className="max-w-xl space-y-5">
+      <PageHeader
+        eyebrow="New note"
+        title="Encounter Note"
+        description={
+          isNurse
+            ? 'What happened at this visit, and any vitals you measured. Vitals feed the risk score.'
+            : 'What happened at this visit. Vitals are recorded by a nurse.'
+        }
+      />
       <Card>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input label="Note" value={noteText} onChange={(e) => setNoteText(e.target.value)} />
           {isNurse && (
-            <>
+            <div className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="BP systolic"
                 type="number"
+                inputMode="numeric"
                 value={bpSystolic}
                 onChange={(e) => setBpSystolic(e.target.value)}
               />
               <Input
                 label="BP diastolic"
                 type="number"
+                inputMode="numeric"
                 value={bpDiastolic}
                 onChange={(e) => setBpDiastolic(e.target.value)}
               />
               <Input
                 label="Temperature (C)"
                 type="number"
+                inputMode="decimal"
                 value={temperatureC}
                 onChange={(e) => setTemperatureC(e.target.value)}
               />
               <Input
                 label="Hemoglobin (g/dL)"
                 type="number"
+                inputMode="decimal"
                 value={hemoglobinGdl}
                 onChange={(e) => setHemoglobinGdl(e.target.value)}
               />
-            </>
+            </div>
           )}
           {error && (
-            <p role="alert" className="text-sm text-red-600">
+            <Notice tone="error" label="Note not saved">
               {error}
-            </p>
+            </Notice>
           )}
           <Button type="submit" disabled={submitting}>
             {submitting ? 'Saving...' : 'Save note'}

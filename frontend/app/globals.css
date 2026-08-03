@@ -7,10 +7,18 @@
   --foreground: #171717;
 }
 
+/* The app is light-mode only, on purpose. There is deliberately NO
+   `@media (prefers-color-scheme: dark)` block here and none should be added: AMHOS has no
+   dark theme, and the one that existed inverted the variables above without restyling
+   anything else, which made text unreadable across every screen. */
+
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Geist Sans is already self-hosted by app/layout.tsx and is the `ui` face in the design
+     system. The previous Arial fallback meant any element that had not been given an explicit
+     `font-ui` rendered in a fourth typeface that is not part of the system at all. */
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 @layer utilities {

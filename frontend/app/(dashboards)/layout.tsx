@@ -20,9 +20,9 @@ export default async function DashboardsLayout({ children }: { children: ReactNo
 
   return (
     <CurrentUserProvider user={user}>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-paper font-ui text-ink antialiased">
         <Nav user={user} />
-        <main className="mx-auto max-w-5xl p-4">{children}</main>
+        <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       </div>
     </CurrentUserProvider>
   );

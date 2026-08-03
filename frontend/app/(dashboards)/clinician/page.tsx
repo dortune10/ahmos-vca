@@ -6,6 +6,10 @@ import { apiFetch, ApiError } from '@/lib/api-client';
 import { useCurrentUser } from '@/components/current-user-provider';
 import { Card } from '@/components/ui/card';
 import { Table } from '@/components/ui/table';
+import { Notice } from '@/components/ui/notice';
+import { PageHeader } from '@/components/ui/page-header';
+import { RiskBadge } from '@/components/ui/risk-badge';
+import { riskRowClass } from '@/lib/risk-band';
 
 interface Episode {
   id: string;
@@ -103,15 +107,17 @@ export default function ClinicianTriageBoardPage() {
   }, [user.facilityId]);
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Facility Triage Board</h1>
-      {error && (
-        <p role="alert" className="text-sm text-red-600">
-          {error}
-        </p>
-      )}
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Your facility · highest risk first"
+        title="Facility Triage Board"
+        description="Ordered by risk band, then by soonest estimated delivery. Episodes with no assessment yet sort last — not triaged is not the same as low risk."
+      />
+      {error && <Notice tone="error">{error}</Notice>}
       {loading ? (
-        <p>Loading triage board...</p>
+        <p className="font-data text-xs uppercase tracking-[0.14em] text-ink-muted">
+          Loading triage board...
+        </p>
       ) : (
         <Card>
           <Table>
@@ -121,23 +127,52 @@ export default function ClinicianTriageBoardPage() {
                 <th>Risk band</th>
                 <th>Status</th>
                 <th>EDD</th>
-                <th></th>
+                <th>
+                  <span className="sr-only">Episode</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {episodes.length === 0 && (
                 <tr>
-                  <td colSpan={5}>No active episodes at this facility.</td>
+                  <td colSpan={5}>
+                    <span className="block py-4 text-ink-muted">
+                      No active episodes at this facility.
+                    </span>
+                  </td>
                 </tr>
               )}
               {episodes.map((episode) => (
-                <tr key={episode.id}>
-                  <td>{personNames[episode.personId] ?? `#${episode.personId.slice(-8)}`}</td>
-                  <td>{episode.riskBand ?? 'unassessed'}</td>
-                  <td>{episode.status}</td>
-                  <td>{episode.estimatedDeliveryDate ?? '—'}</td>
+                // The high-risk block at the top of the queue carries a 5% band-high wash, so
+                // the rows that need a clinician first are findable by shape before any text
+                // is read. Measured 15.2:1 for ink on that wash — the tint is a locator, never
+                // a substitute for the badge.
+                <tr key={episode.id} className={riskRowClass(episode.riskBand)}>
                   <td>
-                    <Link href={`/clinician/episodes/${episode.id}`}>View</Link>
+                    <span className="font-medium text-ink">
+                      {personNames[episode.personId] ?? `#${episode.personId.slice(-8)}`}
+                    </span>
+                  </td>
+                  <td>
+                    <RiskBadge band={episode.riskBand} fallback="unassessed" />
+                  </td>
+                  <td>
+                    <span className="font-data text-xs uppercase tracking-[0.08em]">
+                      {episode.status}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="whitespace-nowrap font-data text-xs">
+                      {episode.estimatedDeliveryDate ?? '—'}
+                    </span>
+                  </td>
+                  <td>
+                    <Link
+                      href={`/clinician/episodes/${episode.id}`}
+                      className="whitespace-nowrap font-data text-xs uppercase tracking-[0.1em] text-ink underline decoration-ink/30 underline-offset-[3px] transition-colors hover:decoration-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                    >
+                      View
+                    </Link>
                   </td>
                 </tr>
               ))}

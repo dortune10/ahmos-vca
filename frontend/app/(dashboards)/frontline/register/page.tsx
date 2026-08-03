@@ -7,6 +7,8 @@ import { useCurrentUser } from '@/components/current-user-provider';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
+import { PageHeader } from '@/components/ui/page-header';
 
 interface PersonResponse {
   id: string;
@@ -67,10 +69,19 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">
-        {isNurse ? 'Register Patient' : 'Quick Registration'}
-      </h1>
+    // The form is capped at a readable measure rather than stretched across the dashboard's
+    // full width: a single column of fields is faster to work down, and this is the one thing
+    // a CHW does most often, standing up, on a phone.
+    <div className="max-w-xl space-y-5">
+      <PageHeader
+        eyebrow="New record"
+        title={isNurse ? 'Register Patient' : 'Quick Registration'}
+        description={
+          isNurse
+            ? 'Creates the person and opens their pregnancy episode at your facility.'
+            : 'Name and phone number are enough to open a record. A nurse can complete the rest later.'
+        }
+      />
       <Card>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
@@ -109,9 +120,9 @@ export default function RegisterPage() {
             </>
           )}
           {error && (
-            <p role="alert" className="text-sm text-red-600">
+            <Notice tone="error" label="Not registered">
               {error}
-            </p>
+            </Notice>
           )}
           <Button type="submit" disabled={submitting}>
             {submitting ? 'Registering...' : 'Register'}

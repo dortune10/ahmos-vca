@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { useCurrentUser } from '@/components/current-user-provider';
-import { Card } from '@/components/ui/card';
+import { Card, CardTitle } from '@/components/ui/card';
 import { Table } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
+import { PageHeader } from '@/components/ui/page-header';
 import { nextValidReferralStatuses } from '@/lib/referral-state-machine';
 
 interface Referral {
@@ -88,89 +90,135 @@ export default function ClinicianReferralsPage() {
   }
 
   if (loading) {
-    return <p>Loading referrals...</p>;
+    return (
+      <p className="font-data text-xs uppercase tracking-[0.14em] text-ink-muted">
+        Loading referrals...
+      </p>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Referrals</h1>
-      {error && (
-        <p role="alert" className="text-sm text-red-600">
-          {error}
-        </p>
-      )}
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Your facility"
+        title="Referrals"
+        description="Referrals arriving at and leaving your facility. Move an incoming referral to its next state as it happens — the trail is what the SLA report reads."
+      />
+      {error && <Notice tone="error">{error}</Notice>}
       {transitionError && (
-        <p role="alert" className="text-sm text-red-600">
+        <Notice tone="error" label="Status not changed">
           {transitionError}
-        </p>
+        </Notice>
       )}
       {!error && (
         <>
           <Card>
-            <h2 className="text-lg font-medium">Incoming (to your facility)</h2>
-            <Table>
-              <thead>
-                <tr>
-                  <th>Reason</th>
-                  <th>Urgency</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {incoming.length === 0 && (
+            <CardTitle>Incoming (to your facility)</CardTitle>
+            <div className="mt-4">
+              <Table>
+                <thead>
                   <tr>
-                    <td colSpan={4}>No incoming referrals.</td>
+                    <th>Reason</th>
+                    <th>Urgency</th>
+                    <th>Status</th>
+                    <th>Actions</th>
                   </tr>
-                )}
-                {incoming.map((referral) => (
-                  <tr key={referral.id}>
-                    <td>{referral.reasonCode}</td>
-                    <td>{referral.urgency}</td>
-                    <td>{referral.status}</td>
-                    <td className="space-x-2">
-                      {nextValidReferralStatuses(referral.status).map((nextStatus) => (
-                        <Button
-                          key={nextStatus}
-                          variant="secondary"
-                          disabled={transitioningId === referral.id}
-                          onClick={() => handleTransition(referral.id, nextStatus)}
+                </thead>
+                <tbody>
+                  {incoming.length === 0 && (
+                    <tr>
+                      <td colSpan={4}>
+                        <span className="block py-4 text-ink-muted">No incoming referrals.</span>
+                      </td>
+                    </tr>
+                  )}
+                  {incoming.map((referral) => (
+                    <tr key={referral.id}>
+                      <td>
+                        <span className="text-ink">{referral.reasonCode}</span>
+                      </td>
+                      <td>
+                        <span
+                          className={`font-data text-xs uppercase tracking-[0.08em] ${
+                            referral.urgency === 'urgent'
+                              ? 'border-l-2 border-ink pl-1.5 font-medium text-ink'
+                              : ''
+                          }`}
                         >
-                          {nextStatus}
-                        </Button>
-                      ))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
+                          {referral.urgency}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="font-data text-xs uppercase tracking-[0.08em]">
+                          {referral.status}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap">
+                        <span className="inline-flex flex-wrap gap-2">
+                          {nextValidReferralStatuses(referral.status).map((nextStatus) => (
+                            <Button
+                              key={nextStatus}
+                              variant="secondary"
+                              disabled={transitioningId === referral.id}
+                              onClick={() => handleTransition(referral.id, nextStatus)}
+                            >
+                              {nextStatus}
+                            </Button>
+                          ))}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
           </Card>
 
           <Card>
-            <h2 className="text-lg font-medium">Outgoing (from your facility)</h2>
-            <Table>
-              <thead>
-                <tr>
-                  <th>Reason</th>
-                  <th>Urgency</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {outgoing.length === 0 && (
+            <CardTitle>Outgoing (from your facility)</CardTitle>
+            <div className="mt-4">
+              <Table>
+                <thead>
                   <tr>
-                    <td colSpan={3}>No outgoing referrals.</td>
+                    <th>Reason</th>
+                    <th>Urgency</th>
+                    <th>Status</th>
                   </tr>
-                )}
-                {outgoing.map((referral) => (
-                  <tr key={referral.id}>
-                    <td>{referral.reasonCode}</td>
-                    <td>{referral.urgency}</td>
-                    <td>{referral.status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
+                </thead>
+                <tbody>
+                  {outgoing.length === 0 && (
+                    <tr>
+                      <td colSpan={3}>
+                        <span className="block py-4 text-ink-muted">No outgoing referrals.</span>
+                      </td>
+                    </tr>
+                  )}
+                  {outgoing.map((referral) => (
+                    <tr key={referral.id}>
+                      <td>
+                        <span className="text-ink">{referral.reasonCode}</span>
+                      </td>
+                      <td>
+                        <span
+                          className={`font-data text-xs uppercase tracking-[0.08em] ${
+                            referral.urgency === 'urgent'
+                              ? 'border-l-2 border-ink pl-1.5 font-medium text-ink'
+                              : ''
+                          }`}
+                        >
+                          {referral.urgency}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="font-data text-xs uppercase tracking-[0.08em]">
+                          {referral.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
           </Card>
         </>
       )}

@@ -6,6 +6,10 @@ import { apiFetch, ApiError } from '@/lib/api-client';
 import { useCurrentUser } from '@/components/current-user-provider';
 import { Card } from '@/components/ui/card';
 import { Table } from '@/components/ui/table';
+import { Notice } from '@/components/ui/notice';
+import { PageHeader } from '@/components/ui/page-header';
+import { RiskBadge } from '@/components/ui/risk-badge';
+import { riskRowClass } from '@/lib/risk-band';
 
 interface Episode {
   id: string;
@@ -80,15 +84,17 @@ export default function FrontlinePage() {
   }, [user.facilityId]);
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">My Caseload</h1>
-      {error && (
-        <p role="alert" className="text-sm text-red-600">
-          {error}
-        </p>
-      )}
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Your facility"
+        title="My Caseload"
+        description="Every pregnancy episode registered at your facility. Open a row to read its notes or record a visit."
+      />
+      {error && <Notice tone="error">{error}</Notice>}
       {loading ? (
-        <p>Loading caseload...</p>
+        <p className="font-data text-xs uppercase tracking-[0.14em] text-ink-muted">
+          Loading caseload...
+        </p>
       ) : (
         <Card>
           <Table>
@@ -103,25 +109,37 @@ export default function FrontlinePage() {
             <tbody>
               {episodes.length === 0 && (
                 <tr>
-                  <td colSpan={4}>No episodes yet.</td>
+                  <td colSpan={4}>
+                    <span className="block py-4 text-ink-muted">No episodes yet.</span>
+                  </td>
                 </tr>
               )}
               {episodes.map((episode) => (
-                <tr key={episode.id}>
+                <tr key={episode.id} className={riskRowClass(episode.riskBand)}>
                   <td>
                     {/* The person's name is the row's link target: opening a caseload row
                         leads to that episode's frontline view, which is where notes are read
                         and from which the encounter-note form is one further click. */}
                     <Link
                       href={`/frontline/episodes/${episode.id}`}
-                      className="font-medium text-gray-900 underline underline-offset-2 hover:text-gray-700"
+                      className="font-medium text-ink underline decoration-ink/30 underline-offset-[3px] transition-colors hover:decoration-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
                     >
                       {personNames[episode.personId] ?? `#${episode.personId.slice(-8)}`}
                     </Link>
                   </td>
-                  <td>{episode.status}</td>
-                  <td>{episode.riskBand ?? '—'}</td>
-                  <td>{episode.estimatedDeliveryDate ?? '—'}</td>
+                  <td>
+                    <span className="font-data text-xs uppercase tracking-[0.08em]">
+                      {episode.status}
+                    </span>
+                  </td>
+                  <td>
+                    <RiskBadge band={episode.riskBand} fallback="—" />
+                  </td>
+                  <td>
+                    <span className="whitespace-nowrap font-data text-xs">
+                      {episode.estimatedDeliveryDate ?? '—'}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

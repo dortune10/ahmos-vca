@@ -3,9 +3,11 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { useCurrentUser } from '@/components/current-user-provider';
-import { Card } from '@/components/ui/card';
+import { Card, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
 import { isEpisodeEligibleForReferral } from '@/lib/referral-state-machine';
 
 interface Facility {
@@ -112,53 +114,45 @@ export function ReferralCreateForm({
 
   return (
     <Card>
-      <h2 className="text-lg font-medium">Create Referral</h2>
+      <CardTitle>Create Referral</CardTitle>
       {!eligible ? (
-        <p className="text-sm text-gray-500">
+        <p className="mt-3 text-sm leading-relaxed text-ink-muted">
           Referral creation is not available while this episode is {episodeStatus}.
         </p>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="to-facility" className="text-sm font-medium text-gray-700">
-              Receiving facility
-            </label>
-            <select
-              id="to-facility"
-              value={toFacilityId}
-              onChange={(e) => setToFacilityId(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-            >
-              <option value="">Select a facility</option>
-              {facilities.map((facility) => (
-                <option key={facility.id} value={facility.id}>
-                  {facility.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <Select
+            id="to-facility"
+            label="Receiving facility"
+            value={toFacilityId}
+            onChange={(e) => setToFacilityId(e.target.value)}
+          >
+            <option value="">Select a facility</option>
+            {facilities.map((facility) => (
+              <option key={facility.id} value={facility.id}>
+                {facility.name}
+              </option>
+            ))}
+          </Select>
           <Input label="Reason" value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} />
-          <div className="flex flex-col gap-1">
-            <label htmlFor="urgency" className="text-sm font-medium text-gray-700">
-              Urgency
-            </label>
-            <select
-              id="urgency"
-              value={urgency}
-              onChange={(e) => setUrgency(e.target.value as 'routine' | 'urgent')}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-            >
-              <option value="routine">routine</option>
-              <option value="urgent">urgent</option>
-            </select>
-          </div>
+          <Select
+            id="urgency"
+            label="Urgency"
+            value={urgency}
+            onChange={(e) => setUrgency(e.target.value as 'routine' | 'urgent')}
+          >
+            <option value="routine">routine</option>
+            <option value="urgent">urgent</option>
+          </Select>
           {error && (
-            <p role="alert" className="text-sm text-red-600">
+            <Notice tone="error" label="Referral not created">
               {error}
-            </p>
+            </Notice>
           )}
           {created && (
-            <p className="text-sm text-green-700">Referral created (status: {created.status}).</p>
+            <Notice tone="success" label="Referral created">
+              Referral created (status: {created.status}).
+            </Notice>
           )}
           <Button type="submit" disabled={submitting}>
             {submitting ? 'Creating...' : 'Create referral'}

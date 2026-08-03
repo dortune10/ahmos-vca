@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
+import { Notice } from '@/components/ui/notice';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -55,37 +55,81 @@ export default function LoginPage() {
     }
   }
 
+  // The first screen of every shift, read on a low-end Android over a bad connection. It is
+  // one object: an ink masthead sitting directly on the paper form, the way an official
+  // register carries a printed header above ruled lines. That gives the screen an identity
+  // with a background colour and two typefaces — no image, no illustration, no extra bytes,
+  // nothing between the health worker and the two fields.
+  //
+  // It is also the only screen in the product with no clinical data on it, so it carries no
+  // saturation at all — not even for the failure message. The first saturated pixel anyone
+  // sees in AMHOS is a risk band.
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-sm">
-        <h1 className="mb-4 text-lg font-semibold text-gray-900">AMHOS Staff Login</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={handleKeyDown}
-            required
-          />
-          <Input
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={handleKeyDown}
-            required
-          />
-          {error && (
-            <p role="alert" className="text-sm text-red-600">
-              {error}
-            </p>
-          )}
-          <Button type="button" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? 'Signing in...' : 'Sign in'}
-          </Button>
-        </form>
-      </Card>
+    <div className="flex min-h-screen flex-col bg-paper font-ui text-ink antialiased">
+      <main className="flex flex-1 items-center justify-center px-4 py-8 sm:px-6 sm:py-12">
+        <div className="w-full max-w-[25rem]">
+          <div className="overflow-hidden rounded-lg border border-paper-rule shadow-[0_1px_2px_rgba(14,35,32,0.04),0_18px_40px_-28px_rgba(14,35,32,0.6)]">
+            <div className="bg-ink px-6 py-6 sm:px-7">
+              <p className="font-display text-2xl leading-none tracking-[0.02em] text-paper">
+                AMHOS
+              </p>
+              <p className="mt-2.5 font-data text-[0.625rem] uppercase leading-4 tracking-[0.16em] text-ink-pale">
+                AI Maternal Health Operating System
+              </p>
+            </div>
+
+            <div className="bg-white px-6 py-6 sm:px-7">
+              <h1 className="font-display text-xl leading-snug text-ink">Staff sign-in</h1>
+
+              <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+                <Input
+                  label="Email"
+                  type="email"
+                  autoComplete="username"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  required
+                />
+                <Input
+                  label="Password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  required
+                />
+                {error && (
+                  <Notice tone="error" label="Sign-in failed">
+                    {error}
+                  </Notice>
+                )}
+                <Button
+                  type="button"
+                  size="lg"
+                  className="w-full"
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                >
+                  {submitting ? 'Signing in...' : 'Sign in'}
+                </Button>
+              </form>
+            </div>
+
+            <div className="border-t border-paper-rule bg-paper-deep px-6 py-3.5 sm:px-7">
+              <p className="text-xs leading-relaxed text-ink-soft">
+                Accounts are created by your programme administrator. There is no public
+                sign-up.
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-4 px-1 font-data text-[0.625rem] uppercase leading-4 tracking-[0.16em] text-ink-muted">
+            Staff platform &middot; Pre-pilot
+          </p>
+        </div>
+      </main>
     </div>
   );
 }

@@ -3,9 +3,13 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { apiFetch, ApiError } from '@/lib/api-client';
-import { Card } from '@/components/ui/card';
+import { Card, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
+import { PageHeader } from '@/components/ui/page-header';
+import { RiskBadge } from '@/components/ui/risk-badge';
 import { EncounterNoteList } from '@/components/encounter-note-list';
 import { ReferralCreateForm } from '@/components/referral-create-form';
 
@@ -193,73 +197,144 @@ export default function ClinicianEpisodeDetailPage() {
   }
 
   if (loading) {
-    return <p>Loading episode...</p>;
-  }
-
-  if (error || !episode) {
     return (
-      <p role="alert" className="text-sm text-red-600">
-        {error ?? 'Episode not found.'}
+      <p className="font-data text-xs uppercase tracking-[0.14em] text-ink-muted">
+        Loading episode...
       </p>
     );
   }
 
+  if (error || !episode) {
+    return <Notice tone="error">{error ?? 'Episode not found.'}</Notice>;
+  }
+
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Episode {episode.id}</h1>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Pregnancy episode"
+        title={
+          <>
+            Episode{' '}
+            <span className="font-data text-base tracking-tight text-ink-soft sm:text-lg">
+              {episode.id}
+            </span>
+          </>
+        }
+      />
 
       <Card>
-        <h2 className="text-lg font-medium">Overview</h2>
-        <dl className="grid grid-cols-2 gap-2 text-sm">
-          <dt className="text-gray-500">Status</dt>
-          <dd>{episode.status}</dd>
-          <dt className="text-gray-500">Gestational age</dt>
-          <dd>{episode.gestationalAgeWeeks ?? '—'} weeks</dd>
-          <dt className="text-gray-500">Estimated delivery date</dt>
-          <dd>{episode.estimatedDeliveryDate ?? '—'}</dd>
-          <dt className="text-gray-500">Risk band</dt>
-          <dd>{episode.riskBand ?? 'unassessed'}</dd>
+        <CardTitle>Overview</CardTitle>
+
+        {/* Gestational age gets the treatment the landing page's example record gives it: it
+            frames every other reading on the page, so it is set large in the `data` face
+            rather than buried as one row of a two-column list. */}
+        <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-3">
+          <div>
+            <p className="font-data text-[0.625rem] uppercase leading-4 tracking-[0.16em] text-ink-muted">
+              Gestational age
+            </p>
+            <p className="mt-1.5 font-data text-3xl leading-none tracking-tight text-ink">
+              {episode.gestationalAgeWeeks ?? '—'}
+              <span className="ml-1.5 text-sm text-ink-muted">weeks</span>
+            </p>
+          </div>
+          <div className="pb-1">
+            <p className="font-data text-[0.625rem] uppercase leading-4 tracking-[0.16em] text-ink-muted">
+              Estimated delivery date
+            </p>
+            <p className="mt-1.5 font-data text-sm text-ink-soft">
+              {episode.estimatedDeliveryDate ?? '—'}
+            </p>
+          </div>
+        </div>
+
+        <dl className="mt-5 divide-y divide-paper-rule border-t border-paper-rule">
+          <div className="flex flex-col gap-1.5 py-3 sm:flex-row sm:items-center sm:gap-4">
+            <dt className="font-data text-[0.625rem] uppercase leading-4 tracking-[0.16em] text-ink-muted sm:w-32 sm:shrink-0">
+              Status
+            </dt>
+            <dd>
+              <span className="font-data text-xs uppercase tracking-[0.08em] text-ink-soft">
+                {episode.status}
+              </span>
+            </dd>
+          </div>
+          <div className="flex flex-col gap-1.5 py-3 sm:flex-row sm:items-center sm:gap-4">
+            <dt className="font-data text-[0.625rem] uppercase leading-4 tracking-[0.16em] text-ink-muted sm:w-32 sm:shrink-0">
+              Risk band
+            </dt>
+            <dd>
+              <RiskBadge band={episode.riskBand} fallback="unassessed" />
+            </dd>
+          </div>
         </dl>
       </Card>
 
       <Card>
-        <h2 className="text-lg font-medium">Latest Risk Assessment</h2>
+        <CardTitle>Latest Risk Assessment</CardTitle>
         {riskAssessment === null ? (
-          <p>No risk assessment yet for this episode.</p>
+          <p className="mt-3 text-sm text-ink-muted">No risk assessment yet for this episode.</p>
         ) : (
-          <div className="space-y-2">
-            <p className="border-l-4 border-yellow-500 bg-yellow-50 p-3 text-sm font-medium text-yellow-800">
-              Caution: these rule thresholds are provisional and have not received clinical
-              sign-off. Use clinical judgment — do not treat this band as a final diagnosis.
-            </p>
-            <p>
-              <span className="font-medium">Final risk band:</span> {riskAssessment.finalRiskBand}
-              {' '}({riskAssessment.status})
-            </p>
-            <ul className="list-disc pl-5 text-sm">
-              {riskAssessment.explanation.ruleFactors.map((factor) => (
-                <li key={factor.factor}>
-                  {factor.factor}: {factor.band ?? 'insufficient data'} — {factor.detail}
-                </li>
-              ))}
-            </ul>
+          <div className="mt-4 space-y-4">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <RiskBadge band={riskAssessment.finalRiskBand} fallback="unassessed" />
+              <span className="font-data text-[0.625rem] uppercase leading-4 tracking-[0.16em] text-ink-muted">
+                {riskAssessment.status}
+              </span>
+            </div>
+
+            {/* The clinical caveat outranks everything else on this card, so it takes the ink
+                slab — the weight the landing page gives the same disclaimer. */}
+            <Notice tone="caution" label="Not clinically validated">
+              These rule thresholds are provisional and have not received clinical sign-off.
+              Use clinical judgment — do not treat this band as a final diagnosis.
+            </Notice>
+
+            <div>
+              <p className="font-data text-[0.625rem] uppercase leading-4 tracking-[0.16em] text-ink-muted">
+                Contributing factors
+              </p>
+              <dl className="mt-2 divide-y divide-paper-rule border-t border-paper-rule">
+                {riskAssessment.explanation.ruleFactors.map((factor) => (
+                  <div
+                    key={factor.factor}
+                    className="flex flex-col gap-1.5 py-3 sm:flex-row sm:gap-4"
+                  >
+                    <dt className="font-data text-xs leading-5 text-ink-muted sm:w-40 sm:shrink-0">
+                      {factor.factor}
+                    </dt>
+                    <dd className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+                      <RiskBadge band={factor.band} fallback="insufficient data" />
+                      <span className="text-sm leading-relaxed text-ink-soft">
+                        {factor.detail}
+                      </span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+
             {riskAssessment.explanation.mlReasoning && (
-              <p className="text-sm">ML reasoning: {riskAssessment.explanation.mlReasoning}</p>
+              <p className="text-sm leading-relaxed text-ink-soft">
+                ML reasoning: {riskAssessment.explanation.mlReasoning}
+              </p>
             )}
             {riskAssessment.explanation.mlDisagreement && (
-              <p className="text-sm">
+              <p className="text-sm leading-relaxed text-ink-soft">
                 Model suggested {riskAssessment.explanation.mlDisagreement.mlBand}; rules band
                 retained ({riskAssessment.explanation.mlDisagreement.resolution}).
               </p>
             )}
             {riskAssessment.explanation.mlError && (
-              <p className="text-sm text-gray-600">
+              <p className="text-sm leading-relaxed text-ink-muted">
                 ML enrichment did not run: {riskAssessment.explanation.mlError}. This is a
                 rule-only score, not a model-reviewed one.
               </p>
             )}
             {riskAssessment.overriddenBy && (
-              <p className="text-sm">Overridden. Reason: {riskAssessment.overrideReason}</p>
+              <p className="text-sm leading-relaxed text-ink">
+                Overridden. Reason: {riskAssessment.overrideReason}
+              </p>
             )}
 
             {!overrideOpen ? (
@@ -269,34 +344,29 @@ export default function ClinicianEpisodeDetailPage() {
             ) : (
               <form
                 onSubmit={handleOverrideSubmit}
-                className="space-y-3 rounded-md border border-gray-200 p-3"
+                className="space-y-3.5 rounded-md border border-paper-rule bg-paper p-4"
               >
-                <div className="flex flex-col gap-1">
-                  <label htmlFor="override-band" className="text-sm font-medium text-gray-700">
-                    New risk band
-                  </label>
-                  <select
-                    id="override-band"
-                    value={overrideBand}
-                    onChange={(e) => setOverrideBand(e.target.value as 'low' | 'medium' | 'high')}
-                    className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  >
-                    <option value="low">low</option>
-                    <option value="medium">medium</option>
-                    <option value="high">high</option>
-                  </select>
-                </div>
+                <Select
+                  id="override-band"
+                  label="New risk band"
+                  value={overrideBand}
+                  onChange={(e) => setOverrideBand(e.target.value as 'low' | 'medium' | 'high')}
+                >
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                </Select>
                 <Input
                   label="Override reason"
                   value={overrideReason}
                   onChange={(e) => setOverrideReason(e.target.value)}
                 />
                 {overrideError && (
-                  <p role="alert" className="text-sm text-red-600">
+                  <Notice tone="error" label="Override not saved">
                     {overrideError}
-                  </p>
+                  </Notice>
                 )}
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button type="submit" disabled={overrideSubmitting}>
                     {overrideSubmitting ? 'Submitting...' : 'Submit override'}
                   </Button>
@@ -311,39 +381,48 @@ export default function ClinicianEpisodeDetailPage() {
       </Card>
 
       <Card>
-        <h2 className="text-lg font-medium">Record Encounter Note</h2>
-        <form onSubmit={handleNoteSubmit} className="space-y-4">
+        <CardTitle>Record Encounter Note</CardTitle>
+        <form onSubmit={handleNoteSubmit} className="mt-4 space-y-4">
           <Input label="Note" value={noteText} onChange={(e) => setNoteText(e.target.value)} />
-          <Input
-            label="BP systolic"
-            type="number"
-            value={bpSystolic}
-            onChange={(e) => setBpSystolic(e.target.value)}
-          />
-          <Input
-            label="BP diastolic"
-            type="number"
-            value={bpDiastolic}
-            onChange={(e) => setBpDiastolic(e.target.value)}
-          />
-          <Input
-            label="Temperature (C)"
-            type="number"
-            value={temperatureC}
-            onChange={(e) => setTemperatureC(e.target.value)}
-          />
-          <Input
-            label="Hemoglobin (g/dL)"
-            type="number"
-            value={hemoglobinGdl}
-            onChange={(e) => setHemoglobinGdl(e.target.value)}
-          />
+          {/* Vitals pair up two-across from `sm` — they are read off one instrument at a time
+              and entered in pairs, and a single column of four made the save button fall
+              below the fold on a phone. */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="BP systolic"
+              type="number"
+              inputMode="numeric"
+              value={bpSystolic}
+              onChange={(e) => setBpSystolic(e.target.value)}
+            />
+            <Input
+              label="BP diastolic"
+              type="number"
+              inputMode="numeric"
+              value={bpDiastolic}
+              onChange={(e) => setBpDiastolic(e.target.value)}
+            />
+            <Input
+              label="Temperature (C)"
+              type="number"
+              inputMode="decimal"
+              value={temperatureC}
+              onChange={(e) => setTemperatureC(e.target.value)}
+            />
+            <Input
+              label="Hemoglobin (g/dL)"
+              type="number"
+              inputMode="decimal"
+              value={hemoglobinGdl}
+              onChange={(e) => setHemoglobinGdl(e.target.value)}
+            />
+          </div>
           {noteError && (
-            <p role="alert" className="text-sm text-red-600">
+            <Notice tone="error" label="Note not saved">
               {noteError}
-            </p>
+            </Notice>
           )}
-          {noteSaved && <p className="text-sm text-green-700">Encounter note saved.</p>}
+          {noteSaved && <Notice tone="success">Encounter note saved.</Notice>}
           <Button type="submit" disabled={noteSubmitting}>
             {noteSubmitting ? 'Saving...' : 'Save note'}
           </Button>

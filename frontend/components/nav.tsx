@@ -42,26 +42,45 @@ export function Nav({ user }: { user: AppUser }) {
     router.refresh();
   }
 
+  // Ink bar, the same slab the login masthead and the landing page's risk section use, so the
+  // app has one horizon across every screen. Chrome gets no colour at all: an active-state
+  // highlight or a branded accent here would be exactly the "spend saturation on decoration"
+  // the system forbids, and would put a coloured element in a health worker's peripheral
+  // vision permanently — competing with the risk badges that are supposed to be the only
+  // thing that catches the eye.
   return (
-    <nav className="flex items-center justify-between border-b bg-white px-4 py-3">
-      <div className="flex gap-4">
-        {links.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="text-sm font-medium text-gray-700 hover:text-gray-900"
-          >
-            {link.label}
-          </Link>
-        ))}
-      </div>
-      <div className="flex items-center gap-4">
-        <span className="text-sm text-gray-500">
-          {user.fullName} ({user.role})
+    <nav className="border-b border-ink-line bg-ink">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2.5 px-4 py-3 sm:px-6">
+        {/* Deliberately not a link. Every role already has a home link in its own list, and
+            this pass is not allowed to add navigation — the wordmark is here to identify the
+            system, not to route. */}
+        <span className="font-display text-lg leading-none tracking-[0.02em] text-paper">
+          AMHOS
         </span>
-        <Button type="button" variant="secondary" onClick={handleSignOut}>
-          Sign out
-        </Button>
+
+        {/* On anything narrower than a laptop the links drop to their own full-width row
+            beneath the wordmark rather than shrinking; a nav label a health worker cannot
+            read is worse than a second row 30px tall. */}
+        <div className="order-last flex w-full flex-wrap items-center gap-x-5 gap-y-1.5 lg:order-none lg:w-auto">
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="font-data text-xs uppercase tracking-[0.12em] text-paper underline-offset-[6px] transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-paper"
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
+
+        <div className="ml-auto flex items-center gap-3 sm:gap-4">
+          <span className="font-data text-[0.6875rem] leading-4 tracking-tight text-ink-pale">
+            {user.fullName} ({user.role})
+          </span>
+          <Button type="button" variant="ghost" onClick={handleSignOut}>
+            Sign out
+          </Button>
+        </div>
       </div>
     </nav>
   );
