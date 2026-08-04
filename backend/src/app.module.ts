@@ -14,6 +14,7 @@ import { RiskModule } from './risk/risk.module';
 import { ReferralModule } from './referral/referral.module';
 import { ReportingModule } from './reporting/reporting.module';
 import { WhatsAppBotModule } from './whatsapp-bot/whatsapp-bot.module';
+import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { WhatsAppBotModule } from './whatsapp-bot/whatsapp-bot.module';
     ReferralModule,
     ReportingModule,
     WhatsAppBotModule,
+    AiAssistantModule,
   ],
   controllers: [AppController],
   providers: [AppService],
