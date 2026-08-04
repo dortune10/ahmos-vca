@@ -5,10 +5,14 @@ import { ConversationService } from './conversation.service';
 import { WhatsAppClientService } from './whatsapp-client.service';
 import { MessageRouterService } from './message-router.service';
 import { IdentityModule } from '../identity/identity.module';
+import { EpisodeModule } from '../episode/episode.module';
+import { AiAssistantModule } from '../ai-assistant/ai-assistant.module';
 
 @Module({
   imports: [
     IdentityModule,
+    EpisodeModule,
+    AiAssistantModule,
     // ThrottlerModule is @Global() in @nestjs/throttler, so registering it here rather than in
     // AppModule is intentional and works — don't "fix" it by moving it. Likewise
     // WhatsAppSignatureGuard and WhatsAppSenderThrottlerGuard are referenced by class in
