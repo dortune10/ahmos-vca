@@ -4,16 +4,19 @@ import { EpisodeModule } from '../episode/episode.module';
 import { RiskModule } from '../risk/risk.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { ReferralModule } from '../referral/referral.module';
+import { UsersModule } from '../users/users.module';
 import { DangerSignMatcherService } from './danger-sign-matcher.service';
 import { ProfileContextService } from './profile-context.service';
 import { AiAssistantService, AI_ASSISTANT_ANTHROPIC_CLIENT } from './ai-assistant.service';
+import { EscalationService } from './escalation.service';
 
 @Module({
-  imports: [EpisodeModule, RiskModule, TasksModule, ReferralModule],
+  imports: [EpisodeModule, RiskModule, TasksModule, ReferralModule, UsersModule],
   providers: [
     DangerSignMatcherService,
     ProfileContextService,
     AiAssistantService,
+    EscalationService,
     {
       // Falls back to a placeholder key when ANTHROPIC_API_KEY isn't set, mirroring
       // risk.module.ts's exact rationale: this module (and the app) must still boot without
@@ -23,6 +26,6 @@ import { AiAssistantService, AI_ASSISTANT_ANTHROPIC_CLIENT } from './ai-assistan
       useFactory: () => new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || 'test-key-placeholder' }),
     },
   ],
-  exports: [DangerSignMatcherService, ProfileContextService, AiAssistantService],
+  exports: [DangerSignMatcherService, ProfileContextService, AiAssistantService, EscalationService],
 })
 export class AiAssistantModule {}
