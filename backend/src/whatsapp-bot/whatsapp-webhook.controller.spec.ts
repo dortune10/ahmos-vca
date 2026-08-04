@@ -22,6 +22,11 @@ function buildPerson(overrides: Partial<PersonResponseDto>): PersonResponseDto {
   person.dateOfBirth = null;
   person.whatsappConsent = false;
   person.whatsappConsentAt = null;
+  // Verified against the same wa_id every test in this file sends from, so all twelve tests
+  // written in Task 7 keep exercising the branch they were written for. The
+  // channel-verification tests below override it explicitly.
+  person.whatsappVerifiedPhone = '254700000001';
+  person.whatsappVerifiedAt = '2026-08-01T00:00:00.000Z';
   return Object.assign(person, overrides);
 }
 
@@ -33,6 +38,9 @@ describe('WhatsAppWebhookController.receive', () => {
         : jest.fn().mockResolvedValue(person),
       markWhatsAppConsentAsSystem: jest.fn().mockResolvedValue(undefined),
       revokeWhatsAppConsentAsSystem: jest.fn().mockResolvedValue(undefined),
+      redeemWhatsAppEnrolmentCodeAsSystem: jest
+        .fn()
+        .mockResolvedValue({ outcome: 'verified', attemptsRemaining: 5 }),
     } as unknown as IdentityService;
     const conversationService = {
       getOrCreateConversation: jest.fn().mockResolvedValue({ id: 'conv-1', personId: person?.id }),
@@ -81,7 +89,7 @@ describe('WhatsAppWebhookController.receive', () => {
     const result = await controller.receive(buildPayloadWithText('254700000001', 'hello there'));
 
     expect(result).toEqual({ status: 'consent_pending' });
-    expect(messageRouter.route).toHaveBeenCalledWith({ person }, 'hello there');
+    expect(messageRouter.route).toHaveBeenCalledWith({ person, channelVerified: true }, 'hello there');
     expect(whatsAppClient.sendTextMessage).toHaveBeenCalledTimes(1);
     expect(whatsAppClient.sendTextMessage).toHaveBeenCalledWith(
       '254700000001',
@@ -143,7 +151,10 @@ describe('WhatsAppWebhookController.receive', () => {
     const result = await controller.receive(buildPayloadWithText('254700000001', 'When is my next appointment?'));
 
     expect(result).toEqual({ status: 'answered' });
-    expect(messageRouter.route).toHaveBeenCalledWith({ person }, 'When is my next appointment?');
+    expect(messageRouter.route).toHaveBeenCalledWith(
+      { person, channelVerified: true },
+      'When is my next appointment?',
+    );
     expect(whatsAppClient.sendTextMessage).toHaveBeenCalledWith('254700000001', 'routed reply');
     expect(conversationService.appendMessage).toHaveBeenCalledWith('conv-1', 'outbound', 'routed reply', 'wamid.reply');
   });
@@ -236,5 +247,148 @@ describe('WhatsAppWebhookController.receive', () => {
       .find((entry) => entry.action === 'message_answered');
     expect(answeredCall).toBeDefined();
     expect(JSON.stringify(answeredCall.metadata)).not.toContain('bleeding');
+  });
+
+  // docs/DECISIONS.md #28. An unverified handset is one whose owner has never proved the phone
+  // is theirs — the normal state for a shared or borrowed household phone. She still gets the
+  // router's verdict (that is what would escalate a danger sign), but nothing about her record.
+  it('sends only the enrolment prompt for a known person whose handset is not verified', async () => {
+    const person = buildPerson({ whatsappConsent: true, whatsappVerifiedPhone: null, whatsappVerifiedAt: null });
+    const { controller, whatsAppClient, messageRouter, identityService } = buildController(person);
+    (messageRouter.route as jest.Mock).mockResolvedValue(null);
+
+    const result = await controller.receive(buildPayloadWithText('254700000001', 'When is my next appointment?'));
+
+    expect(result).toEqual({ status: 'verification_pending' });
+    expect(messageRouter.route).toHaveBeenCalledWith(
+      { person, channelVerified: false },
+      'When is my next appointment?',
+    );
+    expect(whatsAppClient.sendTextMessage).toHaveBeenCalledTimes(1);
+    expect(whatsAppClient.sendTextMessage).toHaveBeenCalledWith(
+      '254700000001',
+      expect.stringContaining('6-digit AMHOS code'),
+    );
+    expect(identityService.markWhatsAppConsentAsSystem).not.toHaveBeenCalled();
+  });
+
+  // A handset bound to a DIFFERENT number is treated exactly like no binding at all: this is
+  // her record, reached from a phone she never enrolled.
+  it('treats a message from a handset other than the verified one as unverified', async () => {
+    const person = buildPerson({ whatsappConsent: true, whatsappVerifiedPhone: '254700000009' });
+    const { controller, messageRouter } = buildController(person);
+    (messageRouter.route as jest.Mock).mockResolvedValue(null);
+
+    const result = await controller.receive(buildPayloadWithText('254700000001', 'hello'));
+
+    expect(result).toEqual({ status: 'verification_pending' });
+    expect(messageRouter.route).toHaveBeenCalledWith({ person, channelVerified: false }, 'hello');
+  });
+
+  // The decision #27 emergency path, at its very hardest: not verified, not consented, first
+  // ever message. The router reply (in Plan 2, the escalation text) still goes out FIRST.
+  it('sends the router reply first and then the enrolment prompt for an unverified person', async () => {
+    const person = buildPerson({ whatsappConsent: false, whatsappVerifiedPhone: null });
+    const { controller, whatsAppClient, auditService } = buildController(person);
+
+    const result = await controller.receive(buildPayloadWithText('254700000001', 'I have heavy bleeding'));
+
+    expect(result).toEqual({ status: 'escalated_verification_pending' });
+    expect((whatsAppClient.sendTextMessage as jest.Mock).mock.calls.map((c) => c[1])).toEqual([
+      'routed reply',
+      expect.stringContaining('6-digit AMHOS code'),
+    ]);
+    // A clinician reviewing this escalation needs to know it came from a handset nobody has
+    // proved belongs to the patient. care_task has no metadata column, so the audit trail is
+    // where that signal lives.
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'whatsapp_escalation_from_unverified_channel' }),
+    );
+  });
+
+  // Consent recorded on an unverified handset would attribute "yes, message me" to whoever
+  // happens to be holding the phone. It must not be accepted.
+  it('does not record consent for a bare YES from an unverified handset', async () => {
+    const person = buildPerson({ whatsappConsent: false, whatsappVerifiedPhone: null });
+    const { controller, identityService, messageRouter } = buildController(person);
+    (messageRouter.route as jest.Mock).mockResolvedValue(null);
+
+    const result = await controller.receive(buildPayloadWithText('254700000001', 'YES'));
+
+    expect(result).toEqual({ status: 'verification_pending' });
+    expect(identityService.markWhatsAppConsentAsSystem).not.toHaveBeenCalled();
+    expect(messageRouter.route).toHaveBeenCalled();
+  });
+
+  it('verifies the handset and then asks for consent when a six-digit code is correct', async () => {
+    const person = buildPerson({ whatsappConsent: false, whatsappVerifiedPhone: null });
+    const { controller, identityService, whatsAppClient, messageRouter } = buildController(person);
+
+    const result = await controller.receive(buildPayloadWithText('254700000001', '482915'));
+
+    expect(result).toEqual({ status: 'channel_verified_consent_pending' });
+    expect(identityService.redeemWhatsAppEnrolmentCodeAsSystem).toHaveBeenCalledWith(
+      'p1',
+      't1',
+      '254700000001',
+      '482915',
+    );
+    expect((whatsAppClient.sendTextMessage as jest.Mock).mock.calls.map((c) => c[1])).toEqual([
+      expect.stringContaining('now confirmed'),
+      expect.stringContaining('Reply YES'),
+    ]);
+    // A six-digit message is terminal: it cannot contain a danger sign, so nothing is lost.
+    expect(messageRouter.route).not.toHaveBeenCalled();
+  });
+
+  it('does not re-ask for consent when a correct code arrives from someone already consented', async () => {
+    const person = buildPerson({ whatsappConsent: true, whatsappVerifiedPhone: null });
+    const { controller, whatsAppClient } = buildController(person);
+
+    const result = await controller.receive(buildPayloadWithText('254700000001', '482915'));
+
+    expect(result).toEqual({ status: 'channel_verified' });
+    expect(whatsAppClient.sendTextMessage).toHaveBeenCalledTimes(1);
+  });
+
+  // One reply text for every failure mode, so whoever holds the handset gets no oracle telling
+  // them whether a code exists, has expired, or has run out of attempts.
+  it('gives one uninformative failure reply when the code is wrong', async () => {
+    const person = buildPerson({ whatsappConsent: false, whatsappVerifiedPhone: null });
+    const { controller, identityService, whatsAppClient, auditService, messageRouter } =
+      buildController(person);
+    (identityService.redeemWhatsAppEnrolmentCodeAsSystem as jest.Mock).mockResolvedValue({
+      outcome: 'invalid_code',
+      attemptsRemaining: 4,
+    });
+
+    const result = await controller.receive(buildPayloadWithText('254700000001', '000000'));
+
+    expect(result).toEqual({ status: 'verification_failed' });
+    expect(whatsAppClient.sendTextMessage).toHaveBeenCalledTimes(1);
+    expect(whatsAppClient.sendTextMessage).toHaveBeenCalledWith(
+      '254700000001',
+      expect.stringContaining("didn't work"),
+    );
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'whatsapp_verification_failed',
+        metadata: expect.objectContaining({ outcome: 'invalid_code' }),
+      }),
+    );
+    expect(messageRouter.route).not.toHaveBeenCalled();
+  });
+
+  // Once verified, a six-digit message is just a message again — she is not stuck in a
+  // redemption loop for the rest of the conversation.
+  it('routes a six-digit message normally once the handset is already verified', async () => {
+    const person = buildPerson({ whatsappConsent: true });
+    const { controller, identityService, messageRouter } = buildController(person);
+
+    const result = await controller.receive(buildPayloadWithText('254700000001', '482915'));
+
+    expect(result).toEqual({ status: 'answered' });
+    expect(identityService.redeemWhatsAppEnrolmentCodeAsSystem).not.toHaveBeenCalled();
+    expect(messageRouter.route).toHaveBeenCalledWith({ person, channelVerified: true }, '482915');
   });
 });

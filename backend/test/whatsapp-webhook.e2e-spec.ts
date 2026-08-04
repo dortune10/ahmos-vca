@@ -46,7 +46,16 @@ describe('WhatsApp webhook (e2e)', () => {
 
     const { data: person } = await admin
       .from('person')
-      .insert({ tenant_id: tenantId, first_name: 'Webhook E2E Person', phone_primary: personPhone })
+      .insert({
+        tenant_id: tenantId,
+        first_name: 'Webhook E2E Person',
+        phone_primary: personPhone,
+        // Pre-verified: this spec exercises the consent gate (Task 7), and the
+        // channel-verification gate (Task 12) has its own spec. Digits only, no leading '+',
+        // matching what redeemWhatsAppEnrolmentCodeAsSystem writes.
+        whatsapp_verified_phone: personPhone.replace('+', ''),
+        whatsapp_verified_at: new Date().toISOString(),
+      })
       .select()
       .single();
     personId = person!.id;
@@ -72,7 +81,10 @@ describe('WhatsApp webhook (e2e)', () => {
     app = moduleFixture.createNestApplication({ rawBody: true } as any);
     app.setGlobalPrefix('api/v1');
     await app.init();
-  });
+    // Explicit timeout, matching reporting.e2e-spec.ts's own beforeAll: this compiles the whole
+    // AppModule and inserts fixtures into the shared hosted `amhos` project (docs/DECISIONS.md
+    // #23), which is comfortably slower than Jest's 5s default when the full suite is running.
+  }, 30000);
 
   afterAll(async () => {
     await admin.from('message').delete().in(
@@ -117,5 +129,7 @@ describe('WhatsApp webhook (e2e)', () => {
 
     const thirdResponse = await signedPost(app, textMessagePayload(phoneDigits, 'When is my next appointment?'));
     expect(thirdResponse.body).toEqual({ status: 'answered' });
-  });
+    // Three signed webhook round-trips plus a direct admin read, all against the shared hosted
+    // project — same reason the channel-verification spec's equivalent test sets one.
+  }, 30000);
 });

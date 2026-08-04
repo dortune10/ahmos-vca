@@ -10,6 +10,11 @@ import { MessageRouterService } from './message-router.service';
 import { AuditService } from '../audit/audit.service';
 import { extractInboundMessage } from './extract-inbound-message';
 import { PersonResponseDto } from '../identity/dto/person-response.dto';
+import {
+  isChannelVerified,
+  looksLikeEnrolmentCode,
+  toPhoneDigits,
+} from './channel-verification';
 
 const UNREGISTERED_DECLINE_MESSAGE =
   "We couldn't find your details in our system yet. Please contact your community health " +
@@ -34,6 +39,27 @@ const OPT_OUT_CONFIRMATION_MESSAGE =
 const SAFE_FALLBACK_MESSAGE =
   "Sorry — we couldn't process your message. If this is urgent, please contact your health " +
   'worker or go to your nearest health facility now.';
+
+// Deliberately does NOT mention pregnancy — same rule as CONSENT_OPT_IN_MESSAGE, and for the
+// same reason: it is sent to whoever holds the handset on the strength of a phone-number match
+// alone, before anything has been proved about who they are. (It does reveal that the number is
+// known to the service, but so does every other reply on this branch, and decision #6 requires
+// a distinct message for unregistered numbers regardless.)
+const ENROLMENT_PROMPT_MESSAGE =
+  'Welcome! Before this assistant can share anything, we need to check that this phone belongs ' +
+  'to you. Ask your health worker for your 6-digit AMHOS code, then reply with just those 6 ' +
+  'digits. Reply STOP at any time to stop these messages.';
+
+const VERIFICATION_CONFIRMED_MESSAGE = 'Thank you — this phone is now confirmed.';
+
+// ONE text for every failure mode (wrong code, expired code, attempts used up, no code ever
+// issued). Distinct texts would tell whoever is holding the handset which of those states the
+// record is in, which is a free oracle for someone probing a number that is not theirs. The
+// specific outcome still reaches the audit trail, where a clinician can see it and a patient
+// cannot.
+const VERIFICATION_FAILED_MESSAGE =
+  "That code didn't work. Please ask your health worker for a new 6-digit AMHOS code and try " +
+  'again.';
 
 function isConsentYes(text: string): boolean {
   return text.trim().toUpperCase() === 'YES';
@@ -189,9 +215,24 @@ export class WhatsAppWebhookController {
       return { status: 'consent_revoked' };
     }
 
-    // A bare YES is the answer to the consent prompt, not a question — also terminal, and it
-    // cannot contain a danger sign, so nothing is lost by not routing it.
-    if (!person.whatsappConsent && isConsentYes(inbound.text)) {
+    // docs/DECISIONS.md #28. Matching person.phone_primary proves possession of a handset, not
+    // identity — shared and borrowed phones are normal here. channelVerified is the stronger
+    // claim: THIS handset has been proved to be hers with a staff-issued enrolment code.
+    const channelVerified = isChannelVerified(person, inbound.from);
+
+    // A message that is nothing but six digits is an answer to the enrolment prompt. Terminal
+    // for the same reason a bare YES is: it cannot contain a danger sign, so routing it would
+    // gain nothing. See looksLikeEnrolmentCode's own comment for why the rule is strict.
+    if (!channelVerified && looksLikeEnrolmentCode(inbound.text)) {
+      return await this.handleEnrolmentCode(person, conversation.id, inbound);
+    }
+
+    // A bare YES is the answer to the consent prompt — terminal, and it cannot contain a danger
+    // sign. It only counts once the handset is verified: recording "yes, message me" against a
+    // person on the strength of an unproved handset attributes consent to whoever is holding
+    // the phone, which is the impersonation problem in a different costume. An unverified YES
+    // simply falls through and gets the enrolment prompt again.
+    if (channelVerified && !person.whatsappConsent && isConsentYes(inbound.text)) {
       const consentedAt = new Date().toISOString();
       await this.identityService.markWhatsAppConsentAsSystem(person.id, consentedAt);
       await this.auditService.log({
@@ -207,16 +248,16 @@ export class WhatsAppWebhookController {
       return { status: 'consent_granted' };
     }
 
-    // Everything else goes to the router, CONSENTED OR NOT. This is the decision #27 seam and
-    // a deliberate deviation from the approved design spec's Section 5 step order (consent
-    // step 3 -> danger sign step 4): under the spec order, a registered woman whose first ever
-    // message is "I have heavy bleeding" would get only an opt-in prompt. The router owns the
-    // rule, not this controller:
-    //   * consented     -> always returns reply text
-    //   * not consented -> returns text ONLY if it escalated a danger sign, otherwise null
-    // General AI Q&A stays strictly behind the consent gate inside the router. Because the
-    // router owns it, this controller needs ZERO changes when Plan 2 replaces the stub body.
-    const replyText = await this.messageRouter.route({ person }, inbound.text);
+    // Everything else goes to the router, VERIFIED OR NOT, CONSENTED OR NOT. This is the
+    // decision #27 seam and a deliberate deviation from the approved design spec's Section 5
+    // step order: under the spec order, a registered woman whose first ever message is "I have
+    // heavy bleeding" would get only an opt-in prompt. The router owns both gates, not this
+    // controller:
+    //   * verified + consented -> always returns reply text
+    //   * otherwise            -> returns text ONLY if it escalated a danger sign, else null
+    // General AI Q&A stays strictly behind both gates inside the router. Because the router
+    // owns them, this controller needs ZERO changes when Plan 2 replaces the stub body.
+    const replyText = await this.messageRouter.route({ person, channelVerified }, inbound.text);
 
     if (replyText !== null) {
       const sendResult = await this.whatsAppClient.sendTextMessage(inbound.from, replyText);
@@ -238,12 +279,48 @@ export class WhatsAppWebhookController {
           whatsappMessageId: inbound.whatsappMessageId,
         },
       });
+
+      if (!channelVerified) {
+        // For an unverified person the router returns non-null ONLY when it escalated a danger
+        // sign, so this condition is exactly "an urgent care_task was just raised on the word of
+        // a handset nobody has proved belongs to the patient." care_task has no metadata column
+        // (see Plan 2's "escalation visibility" note), so the audit trail is where a clinician
+        // reviewing the escalation can find that out.
+        this.logger.warn(
+          `Escalation raised for person ${person.id} from an unverified WhatsApp handset. The ` +
+            'sender may not be the patient. Audited as whatsapp_escalation_from_unverified_channel.',
+        );
+        await this.auditService.log({
+          tenantId: person.tenantId,
+          actorUserId: null,
+          entityType: 'person',
+          entityId: person.id,
+          action: 'whatsapp_escalation_from_unverified_channel',
+          metadata: { conversationId: conversation.id },
+        });
+      }
+    }
+
+    // Verification is prompted for before consent, because consent recorded against an
+    // unproved handset is worthless. Both prompts are sent AFTER any router reply, so an
+    // emergency instruction is the first thing she reads and the housekeeping follows it.
+    if (!channelVerified) {
+      const sendResult = await this.whatsAppClient.sendTextMessage(inbound.from, ENROLMENT_PROMPT_MESSAGE);
+      await this.conversationService.appendMessage(conversation.id, 'outbound', ENROLMENT_PROMPT_MESSAGE, sendResult.whatsappMessageId);
+      await this.auditService.log({
+        tenantId: person.tenantId,
+        actorUserId: null,
+        entityType: 'person',
+        entityId: person.id,
+        action: 'whatsapp_verification_prompted',
+        metadata: {},
+      });
+      return { status: replyText !== null ? 'escalated_verification_pending' : 'verification_pending' };
     }
 
     if (!person.whatsappConsent) {
-      // Sent AFTER any router reply, so an emergency instruction is the first thing she reads
-      // and the consent housekeeping follows it. An escalation does not grant consent — she
-      // still has to opt in before this channel will answer anything about her record.
+      // An escalation does not grant consent — she still has to opt in before this channel will
+      // answer anything about her record.
       const sendResult = await this.whatsAppClient.sendTextMessage(inbound.from, CONSENT_OPT_IN_MESSAGE);
       await this.conversationService.appendMessage(conversation.id, 'outbound', CONSENT_OPT_IN_MESSAGE, sendResult.whatsappMessageId);
       await this.auditService.log({
@@ -258,5 +335,54 @@ export class WhatsAppWebhookController {
     }
 
     return { status: 'answered' };
+  }
+
+  private async handleEnrolmentCode(
+    person: PersonResponseDto,
+    conversationId: string,
+    inbound: { from: string; text: string; whatsappMessageId: string },
+  ): Promise<{ status: string }> {
+    const result = await this.identityService.redeemWhatsAppEnrolmentCodeAsSystem(
+      person.id,
+      person.tenantId,
+      toPhoneDigits(inbound.from),
+      inbound.text.replace(/\s+/g, ''),
+    );
+
+    if (result.outcome !== 'verified') {
+      await this.auditService.log({
+        tenantId: person.tenantId,
+        actorUserId: null,
+        entityType: 'person',
+        entityId: person.id,
+        action: 'whatsapp_verification_failed',
+        metadata: { outcome: result.outcome, attemptsRemaining: result.attemptsRemaining },
+      });
+      const failure = await this.whatsAppClient.sendTextMessage(inbound.from, VERIFICATION_FAILED_MESSAGE);
+      await this.conversationService.appendMessage(conversationId, 'outbound', VERIFICATION_FAILED_MESSAGE, failure.whatsappMessageId);
+      return { status: 'verification_failed' };
+    }
+
+    // The 'whatsapp_channel_verified' audit event is written by
+    // IdentityService.redeemWhatsAppEnrolmentCodeAsSystem, next to the binding write itself, so
+    // it cannot drift out of step with the row it describes.
+    const confirmation = await this.whatsAppClient.sendTextMessage(inbound.from, VERIFICATION_CONFIRMED_MESSAGE);
+    await this.conversationService.appendMessage(conversationId, 'outbound', VERIFICATION_CONFIRMED_MESSAGE, confirmation.whatsappMessageId);
+
+    if (person.whatsappConsent) {
+      return { status: 'channel_verified' };
+    }
+
+    const prompt = await this.whatsAppClient.sendTextMessage(inbound.from, CONSENT_OPT_IN_MESSAGE);
+    await this.conversationService.appendMessage(conversationId, 'outbound', CONSENT_OPT_IN_MESSAGE, prompt.whatsappMessageId);
+    await this.auditService.log({
+      tenantId: person.tenantId,
+      actorUserId: null,
+      entityType: 'person',
+      entityId: person.id,
+      action: 'whatsapp_consent_prompted',
+      metadata: {},
+    });
+    return { status: 'channel_verified_consent_pending' };
   }
 }
