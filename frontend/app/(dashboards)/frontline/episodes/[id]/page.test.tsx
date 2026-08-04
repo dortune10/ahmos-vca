@@ -198,6 +198,16 @@ describe('FrontlineEpisodeDetailPage', () => {
     );
   });
 
+  it('offers a WhatsApp enrolment code for the person on this episode', async () => {
+    setUser('chw');
+    mockFetchByPath({ '/pregnancy-episodes/e1': SAMPLE_EPISODE });
+
+    render(<FrontlineEpisodeDetailPage />);
+
+    await waitFor(() => expect(screen.getByText('WhatsApp enrolment code')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Issue enrolment code' })).toBeInTheDocument();
+  });
+
   it('shows an error when the episode fails to load', async () => {
     mockedApiFetch.mockRejectedValue(new Error('network down'));
 

@@ -8,6 +8,7 @@ import { useCurrentUser } from '@/components/current-user-provider';
 import { Card } from '@/components/ui/card';
 import { EncounterNoteList } from '@/components/encounter-note-list';
 import { ReferralCreateForm } from '@/components/referral-create-form';
+import { WhatsAppEnrolmentCodeCard } from '@/components/whatsapp-enrolment-code-card';
 
 interface Episode {
   id: string;
@@ -134,6 +135,12 @@ export default function FrontlineEpisodeDetailPage() {
           Record encounter note
         </Link>
       </Card>
+
+      {/* Directly under the overview, above the clinical history: enrolling a patient on
+          WhatsApp is something a health worker does while she is standing there, not after
+          scrolling past every note. Ungated by role — CHW and nurse both register patients and
+          both need to hand the code over. */}
+      <WhatsAppEnrolmentCodeCard personId={episode.personId} />
 
       <EncounterNoteList episodeId={episodeId} />
 
