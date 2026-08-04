@@ -119,4 +119,58 @@ export class TasksService {
     }
     return (data ?? []).map(CareTaskResponseDto.fromRow);
   }
+
+  // Service-role reads/writes for callers with no end-user JWT — see the WhatsApp AI
+  // assistant plan's "Adaptations to Existing Modules" section. Existing jwt-based methods
+  // above are untouched.
+  async listUpcomingForEpisodeAsSystem(episodeId: string): Promise<CareTaskResponseDto[]> {
+    const client = this.supabaseService.getServiceClient();
+    const { data, error } = await client
+      .from('care_task')
+      .select('*')
+      .eq('pregnancy_episode_id', episodeId)
+      .in('status', ['Scheduled', 'Due'])
+      .order('due_at', { ascending: true });
+    if (error) {
+      throw error;
+    }
+    return (data ?? []).map(CareTaskResponseDto.fromRow);
+  }
+
+  async createEscalationTask(
+    tenantId: string,
+    pregnancyEpisodeId: string,
+    assignedUserId: string | null,
+    reasonCode: string,
+  ): Promise<CareTaskResponseDto> {
+    const client = this.supabaseService.getServiceClient();
+    const now = new Date().toISOString();
+
+    const { data, error } = await client
+      .from('care_task')
+      .insert({
+        pregnancy_episode_id: pregnancyEpisodeId,
+        task_type: 'danger_sign_escalation',
+        assigned_user_id: assignedUserId,
+        due_at: now,
+        status: 'Due',
+        priority: 'urgent',
+      })
+      .select()
+      .single();
+    if (error) {
+      throw error;
+    }
+
+    await this.auditService.log({
+      tenantId,
+      actorUserId: null,
+      entityType: 'care_task',
+      entityId: data.id,
+      action: 'created',
+      metadata: { taskType: 'danger_sign_escalation', reasonCode, assignedUserId },
+    });
+
+    return CareTaskResponseDto.fromRow(data);
+  }
 }

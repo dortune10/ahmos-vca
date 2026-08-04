@@ -121,3 +121,101 @@ describe('TasksService', () => {
     expect(result).toHaveLength(1);
   });
 });
+
+describe('TasksService system-role methods', () => {
+  describe('listUpcomingForEpisodeAsSystem', () => {
+    it('returns scheduled/due tasks for the episode ordered by due date, via the service-role client', async () => {
+      const orderMock = jest.fn().mockResolvedValue({
+        data: [
+          { id: 't1', pregnancy_episode_id: 'ep1', task_type: 'anc_visit', assigned_user_id: 'u1', due_at: '2026-09-01T00:00:00.000Z', completed_at: null, status: 'Scheduled', priority: 'routine', created_at: '2026-08-01T00:00:00.000Z', updated_at: '2026-08-01T00:00:00.000Z' },
+        ],
+        error: null,
+      });
+      const serviceClient = {
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              in: () => ({
+                order: orderMock,
+              }),
+            }),
+          }),
+        }),
+      };
+      const supabaseService = { getServiceClient: () => serviceClient } as unknown as SupabaseService;
+      const auditService = { log: jest.fn() } as unknown as AuditService;
+      const service = new TasksService(supabaseService, auditService);
+
+      const result = await service.listUpcomingForEpisodeAsSystem('ep1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].taskType).toBe('anc_visit');
+    });
+  });
+
+  describe('createEscalationTask', () => {
+    it('inserts an urgent, immediately-due danger_sign_escalation task and logs an audit event', async () => {
+      const insertedRow = {
+        id: 'ct-escalation-1',
+        pregnancy_episode_id: 'ep1',
+        task_type: 'danger_sign_escalation',
+        assigned_user_id: 'u1',
+        due_at: '2026-08-01T12:00:00.000Z',
+        completed_at: null,
+        status: 'Due',
+        priority: 'urgent',
+        created_at: '2026-08-01T12:00:00.000Z',
+        updated_at: '2026-08-01T12:00:00.000Z',
+      };
+      const singleMock = jest.fn().mockResolvedValue({ data: insertedRow, error: null });
+      const insertMock = jest.fn().mockReturnValue({ select: () => ({ single: singleMock }) });
+      const serviceClient = { from: () => ({ insert: insertMock }) };
+      const supabaseService = { getServiceClient: () => serviceClient } as unknown as SupabaseService;
+      const auditLogMock = jest.fn().mockResolvedValue(undefined);
+      const auditService = { log: auditLogMock } as unknown as AuditService;
+      const service = new TasksService(supabaseService, auditService);
+
+      const result = await service.createEscalationTask('t1', 'ep1', 'u1', 'whatsapp_danger_sign');
+
+      expect(result.id).toBe('ct-escalation-1');
+      expect(insertMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pregnancy_episode_id: 'ep1',
+          task_type: 'danger_sign_escalation',
+          assigned_user_id: 'u1',
+          status: 'Due',
+          priority: 'urgent',
+        }),
+      );
+      expect(auditLogMock).toHaveBeenCalledWith(
+        expect.objectContaining({ entityType: 'care_task', action: 'created' }),
+      );
+    });
+
+    it('allows a null assignedUserId when no staff could be resolved', async () => {
+      const insertedRow = {
+        id: 'ct-escalation-2',
+        pregnancy_episode_id: 'ep1',
+        task_type: 'danger_sign_escalation',
+        assigned_user_id: null,
+        due_at: '2026-08-01T12:00:00.000Z',
+        completed_at: null,
+        status: 'Due',
+        priority: 'urgent',
+        created_at: '2026-08-01T12:00:00.000Z',
+        updated_at: '2026-08-01T12:00:00.000Z',
+      };
+      const insertMock = jest.fn().mockReturnValue({
+        select: () => ({ single: jest.fn().mockResolvedValue({ data: insertedRow, error: null }) }),
+      });
+      const serviceClient = { from: () => ({ insert: insertMock }) };
+      const supabaseService = { getServiceClient: () => serviceClient } as unknown as SupabaseService;
+      const auditService = { log: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService;
+      const service = new TasksService(supabaseService, auditService);
+
+      const result = await service.createEscalationTask('t1', 'ep1', null, 'whatsapp_danger_sign');
+
+      expect(result.assignedUserId).toBeNull();
+    });
+  });
+});

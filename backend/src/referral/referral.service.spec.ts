@@ -393,3 +393,67 @@ function buildListClient(rows: any[]) {
   const selectMock = jest.fn().mockReturnValue(builder);
   return { client: { from: () => ({ select: selectMock }) }, eqMock };
 }
+
+describe('ReferralService.getLatestForEpisodeAsSystem', () => {
+  it('returns the most recent referral for the episode via the service-role client', async () => {
+    const maybeSingleMock = jest.fn().mockResolvedValue({
+      data: {
+        id: 'ref1',
+        pregnancy_episode_id: 'ep1',
+        from_facility_id: 'f1',
+        to_facility_id: 'f2',
+        reason_code: 'high_risk',
+        urgency: 'urgent',
+        status: 'Sent',
+        created_at: '2026-08-01T00:00:00.000Z',
+        accepted_at: null,
+        departed_at: null,
+        arrived_at: null,
+        closed_at: null,
+      },
+      error: null,
+    });
+    const serviceClient = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({ maybeSingle: maybeSingleMock }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const supabaseService = { getServiceClient: () => serviceClient } as unknown as SupabaseService;
+    const auditService = { log: jest.fn() } as unknown as AuditService;
+    const episodeService = {} as unknown as EpisodeService;
+    const service = new ReferralService(supabaseService, auditService, episodeService);
+
+    const result = await service.getLatestForEpisodeAsSystem('ep1');
+
+    expect(result?.id).toBe('ref1');
+    expect(result?.status).toBe('Sent');
+  });
+
+  it('returns null when the episode has no referral', async () => {
+    const serviceClient = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({ maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const supabaseService = { getServiceClient: () => serviceClient } as unknown as SupabaseService;
+    const auditService = { log: jest.fn() } as unknown as AuditService;
+    const episodeService = {} as unknown as EpisodeService;
+    const service = new ReferralService(supabaseService, auditService, episodeService);
+
+    const result = await service.getLatestForEpisodeAsSystem('ep-none');
+
+    expect(result).toBeNull();
+  });
+});

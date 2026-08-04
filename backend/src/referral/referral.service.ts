@@ -172,4 +172,23 @@ export class ReferralService {
     }
     return (data ?? []).map(ReferralResponseDto.fromRow);
   }
+
+  // Service-role read for callers with no end-user JWT — see the WhatsApp AI assistant plan's
+  // "Adaptations to Existing Modules" section. Note this is a READ addition only: that plan
+  // deliberately never adds a system-role "create" method here — danger-sign escalation does
+  // not call ReferralService.create() at all (docs/DECISIONS.md #26).
+  async getLatestForEpisodeAsSystem(episodeId: string): Promise<ReferralResponseDto | null> {
+    const client = this.supabaseService.getServiceClient();
+    const { data, error } = await client
+      .from('referral')
+      .select('*')
+      .eq('pregnancy_episode_id', episodeId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      throw error;
+    }
+    return data ? ReferralResponseDto.fromRow(data) : null;
+  }
 }
