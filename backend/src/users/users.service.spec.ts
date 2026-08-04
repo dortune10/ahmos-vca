@@ -101,3 +101,67 @@ describe('UsersService.list', () => {
     ]);
   });
 });
+
+describe('UsersService system-role staff lookups', () => {
+  describe('findAssignableStaffForFacilityAsSystem', () => {
+    it('returns chw/nurse app_user rows scoped to BOTH the tenant and the facility', async () => {
+      const orderMock = jest.fn().mockResolvedValue({
+        data: [
+          { id: 'u1', tenant_id: 't1', email: 'chw@example.com', role: 'chw', facility_id: 'f1', full_name: 'CHW One' },
+        ],
+        error: null,
+      });
+      const tenantEqMock = jest.fn();
+      const facilityEqMock = jest.fn();
+      const inMock = jest.fn().mockReturnValue({ order: orderMock });
+      facilityEqMock.mockReturnValue({ in: inMock });
+      tenantEqMock.mockReturnValue({ eq: facilityEqMock });
+      const serviceClient = {
+        from: () => ({
+          select: () => ({ eq: tenantEqMock }),
+        }),
+      };
+      const supabaseService = { getServiceClient: () => serviceClient } as unknown as SupabaseService;
+      const auditService = { log: jest.fn() } as unknown as AuditService;
+      const service = new UsersService(supabaseService, auditService);
+
+      const result = await service.findAssignableStaffForFacilityAsSystem('t1', 'f1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].role).toBe('chw');
+      // The tenant filter is the guard against assigning an urgent task to a user in another
+      // tenant, who would never be able to see it. Do not drop it.
+      expect(tenantEqMock).toHaveBeenCalledWith('tenant_id', 't1');
+      expect(facilityEqMock).toHaveBeenCalledWith('facility_id', 'f1');
+      expect(inMock).toHaveBeenCalledWith('role', ['chw', 'nurse']);
+    });
+  });
+
+  describe('findSupervisorsForTenantAsSystem', () => {
+    it('returns supervisor app_user rows for the given tenant', async () => {
+      const orderMock = jest.fn().mockResolvedValue({
+        data: [
+          { id: 'u2', tenant_id: 't1', email: 'supervisor@example.com', role: 'supervisor', facility_id: null, full_name: 'Supervisor One' },
+        ],
+        error: null,
+      });
+      const serviceClient = {
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              eq: () => ({ order: orderMock }),
+            }),
+          }),
+        }),
+      };
+      const supabaseService = { getServiceClient: () => serviceClient } as unknown as SupabaseService;
+      const auditService = { log: jest.fn() } as unknown as AuditService;
+      const service = new UsersService(supabaseService, auditService);
+
+      const result = await service.findSupervisorsForTenantAsSystem('t1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].role).toBe('supervisor');
+    });
+  });
+});
