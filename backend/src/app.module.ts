@@ -13,6 +13,7 @@ import { EpisodeModule } from './episode/episode.module';
 import { RiskModule } from './risk/risk.module';
 import { ReferralModule } from './referral/referral.module';
 import { ReportingModule } from './reporting/reporting.module';
+import { WhatsAppBotModule } from './whatsapp-bot/whatsapp-bot.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ReportingModule } from './reporting/reporting.module';
     RiskModule,
     ReferralModule,
     ReportingModule,
+    WhatsAppBotModule,
   ],
   controllers: [AppController],
   providers: [AppService],

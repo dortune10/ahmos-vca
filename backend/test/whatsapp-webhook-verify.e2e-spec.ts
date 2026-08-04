@@ -7,6 +7,7 @@ import { ConversationService } from '../src/whatsapp-bot/conversation.service';
 import { WhatsAppClientService } from '../src/whatsapp-bot/whatsapp-client.service';
 import { AuditService } from '../src/audit/audit.service';
 import { MessageRouterService } from '../src/whatsapp-bot/message-router.service';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 describe('WhatsAppWebhookController verify (e2e)', () => {
   let app: INestApplication;
@@ -14,6 +15,14 @@ describe('WhatsAppWebhookController verify (e2e)', () => {
   beforeAll(async () => {
     process.env.WHATSAPP_VERIFY_TOKEN = 'test-verify-token';
     const moduleFixture: TestingModule = await Test.createTestingModule({
+      // The GET handshake needs none of these, but the POST handler on the same controller
+      // carries @UseGuards(WhatsAppSignatureGuard, WhatsAppSenderThrottlerGuard), and Nest
+      // instantiates every route's guards at module-init time. WhatsAppSenderThrottlerGuard
+      // extends ThrottlerGuard, whose constructor needs THROTTLER:MODULE_OPTIONS and
+      // ThrottlerStorage — so without this import .compile() throws before a single test runs.
+      // Same class of DI-only failure as the stub providers below: invisible to tsc, and
+      // invisible to `npm test` (jest rootDir is src), so it only surfaces here.
+      imports: [ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 10 }])],
       controllers: [WhatsAppWebhookController],
       providers: [
         { provide: IdentityService, useValue: {} },

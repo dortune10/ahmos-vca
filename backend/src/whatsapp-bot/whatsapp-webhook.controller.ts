@@ -5,6 +5,7 @@ import { IdentityService, AmbiguousPersonMatchError } from '../identity/identity
 import { ConversationService } from './conversation.service';
 import { WhatsAppClientService } from './whatsapp-client.service';
 import { WhatsAppSignatureGuard } from './whatsapp-signature.guard';
+import { WhatsAppSenderThrottlerGuard } from './whatsapp-sender-throttler.guard';
 import { MessageRouterService } from './message-router.service';
 import { AuditService } from '../audit/audit.service';
 import { extractInboundMessage } from './extract-inbound-message';
@@ -85,7 +86,9 @@ export class WhatsAppWebhookController {
   }
 
   @Post()
-  @UseGuards(WhatsAppSignatureGuard)
+  // Guard order matters: the signature guard runs first, so an unsigned request is rejected
+  // before it can consume any sender's rate-limit budget.
+  @UseGuards(WhatsAppSignatureGuard, WhatsAppSenderThrottlerGuard)
   async receive(@Body() payload: unknown): Promise<{ status: string }> {
     const inbound = extractInboundMessage(payload);
     if (!inbound) {
