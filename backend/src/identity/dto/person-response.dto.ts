@@ -7,6 +7,8 @@ export class PersonResponseDto {
   dateOfBirth!: string | null;
   whatsappConsent!: boolean;
   whatsappConsentAt!: string | null;
+  whatsappVerifiedPhone!: string | null;
+  whatsappVerifiedAt!: string | null;
 
   static fromRow(row: any): PersonResponseDto {
     const dto = new PersonResponseDto();
@@ -18,6 +20,8 @@ export class PersonResponseDto {
     dto.dateOfBirth = row.date_of_birth;
     dto.whatsappConsent = row.whatsapp_consent ?? false;
     dto.whatsappConsentAt = row.whatsapp_consent_at ?? null;
+    dto.whatsappVerifiedPhone = row.whatsapp_verified_phone ?? null;
+    dto.whatsappVerifiedAt = row.whatsapp_verified_at ?? null;
     return dto;
   }
 }
