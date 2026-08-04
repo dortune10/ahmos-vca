@@ -264,4 +264,23 @@ export class EpisodeService {
     }
     return (data ?? []).map(EpisodeResponseDto.fromRow);
   }
+
+  // Service-role read for callers with no end-user JWT (e.g. the WhatsApp bot) — see
+  // docs/superpowers/plans/2026-08-01-whatsapp-ai-assistant-escalation.md's "Adaptations to
+  // Existing Modules" section. Existing jwt-based methods above are untouched.
+  async getActiveForPersonAsSystem(personId: string): Promise<EpisodeResponseDto | null> {
+    const client = this.supabaseService.getServiceClient();
+    const { data, error } = await client
+      .from('pregnancy_episode')
+      .select('*')
+      .eq('person_id', personId)
+      .not('status', 'in', '(Closed,Archived)')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      throw error;
+    }
+    return data ? EpisodeResponseDto.fromRow(data) : null;
+  }
 }

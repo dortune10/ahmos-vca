@@ -221,6 +221,24 @@ export class RiskService {
     return (data ?? []).map(RiskAssessmentResponseDto.fromRow);
   }
 
+  // Service-role read for callers with no end-user JWT — see the WhatsApp AI assistant plan's
+  // "Adaptations to Existing Modules" section. The existing jwt-based getLatestForEpisode
+  // above is untouched.
+  async getLatestForEpisodeAsSystem(episodeId: string): Promise<RiskAssessmentResponseDto | null> {
+    const client = this.supabaseService.getServiceClient();
+    const { data, error } = await client
+      .from('risk_assessment')
+      .select('*')
+      .eq('pregnancy_episode_id', episodeId)
+      .order('assessment_time', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      throw error;
+    }
+    return data ? RiskAssessmentResponseDto.fromRow(data) : null;
+  }
+
   @OnEvent('episode.created')
   async handleEpisodeCreated(payload: EpisodeLifecycleEventPayload): Promise<void> {
     try {

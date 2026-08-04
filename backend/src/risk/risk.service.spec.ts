@@ -502,3 +502,68 @@ describe('RiskService.listHistoryForEpisode', () => {
     expect(result.map((r) => r.id)).toEqual(['ra2', 'ra1']);
   });
 });
+
+describe('RiskService.getLatestForEpisodeAsSystem', () => {
+  it('returns the latest risk assessment for the episode using the service-role client', async () => {
+    const maybeSingleMock = jest.fn().mockResolvedValue({
+      data: {
+        id: 'ra1',
+        pregnancy_episode_id: 'ep1',
+        assessment_time: '2026-08-01T00:00:00.000Z',
+        rule_score: '1.0000',
+        ml_score: null,
+        final_risk_band: 'medium',
+        explanation_json: {},
+        overridden_by: null,
+        override_reason: null,
+        status: 'Computed',
+        created_at: '2026-08-01T00:00:00.000Z',
+      },
+      error: null,
+    });
+    const serviceClient = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({ maybeSingle: maybeSingleMock }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const supabaseService = { getServiceClient: () => serviceClient } as unknown as SupabaseService;
+    const auditService = { log: jest.fn() } as unknown as AuditService;
+    const rulesEngine = {} as unknown as RiskRulesEngineService;
+    const mlService = {} as unknown as RiskMlService;
+    const service = new RiskService(supabaseService, auditService, rulesEngine, mlService);
+
+    const result = await service.getLatestForEpisodeAsSystem('ep1');
+
+    expect(result?.finalRiskBand).toBe('medium');
+    expect(result?.ruleScore).toBe(1);
+  });
+
+  it('returns null when the episode has no risk assessment yet', async () => {
+    const serviceClient = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({ maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const supabaseService = { getServiceClient: () => serviceClient } as unknown as SupabaseService;
+    const auditService = { log: jest.fn() } as unknown as AuditService;
+    const rulesEngine = {} as unknown as RiskRulesEngineService;
+    const mlService = {} as unknown as RiskMlService;
+    const service = new RiskService(supabaseService, auditService, rulesEngine, mlService);
+
+    const result = await service.getLatestForEpisodeAsSystem('ep-none');
+
+    expect(result).toBeNull();
+  });
+});

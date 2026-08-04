@@ -570,4 +570,70 @@ describe('EpisodeService', () => {
       await expect(service.listEncounterNotes('jwt', 'missing')).rejects.toThrow(EpisodeNotFoundError);
     });
   });
+
+  describe('getActiveForPersonAsSystem', () => {
+    it('returns the most recent non-closed/archived episode for the person', async () => {
+      const maybeSingleMock = jest.fn().mockResolvedValue({
+        data: {
+          id: 'ep1',
+          person_id: 'p1',
+          facility_id: 'f1',
+          lmp_date: '2026-01-01',
+          estimated_delivery_date: '2026-10-08',
+          gestational_age_weeks: 20,
+          risk_band: 'medium',
+          status: 'Active',
+        },
+        error: null,
+      });
+      const serviceClient = {
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              not: () => ({
+                order: () => ({
+                  limit: () => ({ maybeSingle: maybeSingleMock }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      };
+      const supabaseService = { getServiceClient: () => serviceClient } as unknown as SupabaseService;
+      const auditService = { log: jest.fn() } as unknown as AuditService;
+      const tasksService = {} as unknown as TasksService;
+      const eventEmitter = {} as unknown as EventEmitter2;
+      const service = new EpisodeService(supabaseService, auditService, tasksService, eventEmitter);
+
+      const result = await service.getActiveForPersonAsSystem('p1');
+
+      expect(result?.id).toBe('ep1');
+      expect(result?.status).toBe('Active');
+    });
+
+    it('returns null when the person has no active episode', async () => {
+      const serviceClient = {
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              not: () => ({
+                order: () => ({
+                  limit: () => ({ maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }) }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      };
+      const supabaseService = { getServiceClient: () => serviceClient } as unknown as SupabaseService;
+      const auditService = { log: jest.fn() } as unknown as AuditService;
+      const tasksService = {} as unknown as TasksService;
+      const eventEmitter = {} as unknown as EventEmitter2;
+      const service = new EpisodeService(supabaseService, auditService, tasksService, eventEmitter);
+
+      const result = await service.getActiveForPersonAsSystem('p-none');
+
+      expect(result).toBeNull();
+    });
+  });
 });
