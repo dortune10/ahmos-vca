@@ -83,7 +83,7 @@ describe('EpisodeService', () => {
         generateInitialAncSchedule: generateScheduleMock,
       } as unknown as TasksService;
       const emitMock = jest.fn();
-      const eventEmitter = { emit: emitMock } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: emitMock } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
       const result = await service.create('jwt', 'u1', 't1', { personId: 'p1', facilityId: 'f1' });
@@ -109,7 +109,7 @@ describe('EpisodeService', () => {
       const tasksService = {
         generateInitialAncSchedule: jest.fn().mockResolvedValue([]),
       } as unknown as TasksService;
-      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: jest.fn() } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
       const result = await service.create('jwt', 'u1', 't1', {
@@ -130,7 +130,7 @@ describe('EpisodeService', () => {
       const tasksService = {
         generateInitialAncSchedule: jest.fn().mockResolvedValue([]),
       } as unknown as TasksService;
-      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: jest.fn() } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
       const result = await service.create('jwt', 'u1', 't1', {
@@ -151,7 +151,7 @@ describe('EpisodeService', () => {
       const tasksService = {
         generateInitialAncSchedule: jest.fn().mockResolvedValue([]),
       } as unknown as TasksService;
-      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: jest.fn() } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
       const result = await service.create('jwt', 'u1', 't1', { personId: 'p1', facilityId: 'f1' });
@@ -168,7 +168,7 @@ describe('EpisodeService', () => {
       const tasksService = {
         generateInitialAncSchedule: generateScheduleMock,
       } as unknown as TasksService;
-      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: jest.fn() } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
 
@@ -228,7 +228,7 @@ describe('EpisodeService', () => {
       const auditService = { log: auditLogMock } as unknown as AuditService;
       const tasksService = { generateInitialAncSchedule: jest.fn() } as unknown as TasksService;
       const emitMock = jest.fn();
-      const eventEmitter = { emit: emitMock } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: emitMock } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
       const result = await service.recordEncounterNote('jwt', 'u1', 'e1', {
@@ -253,7 +253,7 @@ describe('EpisodeService', () => {
       } as unknown as SupabaseService;
       const auditService = { log: jest.fn() } as unknown as AuditService;
       const tasksService = { generateInitialAncSchedule: jest.fn() } as unknown as TasksService;
-      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: jest.fn() } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
 
@@ -303,7 +303,7 @@ describe('EpisodeService', () => {
       const auditLogMock = jest.fn().mockResolvedValue(undefined);
       const auditService = { log: auditLogMock } as unknown as AuditService;
       const tasksService = { generateInitialAncSchedule: jest.fn() } as unknown as TasksService;
-      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: jest.fn() } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
       const result = await service.updateStatus('jwt', 'u1', 'e1', 'Referred');
@@ -325,7 +325,7 @@ describe('EpisodeService', () => {
       } as unknown as SupabaseService;
       const auditService = { log: jest.fn() } as unknown as AuditService;
       const tasksService = { generateInitialAncSchedule: jest.fn() } as unknown as TasksService;
-      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: jest.fn() } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
 
@@ -384,7 +384,7 @@ describe('EpisodeService', () => {
       } as unknown as SupabaseService;
       const auditService = { log: jest.fn() } as unknown as AuditService;
       const tasksService = { generateInitialAncSchedule: jest.fn() } as unknown as TasksService;
-      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: jest.fn() } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
       const result = await service.getById('jwt', 'e1');
@@ -398,7 +398,7 @@ describe('EpisodeService', () => {
       } as unknown as SupabaseService;
       const auditService = { log: jest.fn() } as unknown as AuditService;
       const tasksService = { generateInitialAncSchedule: jest.fn() } as unknown as TasksService;
-      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: jest.fn() } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
 
@@ -425,7 +425,7 @@ describe('EpisodeService', () => {
       const supabaseService = { getClientForUser: () => client } as unknown as SupabaseService;
       const auditService = { log: jest.fn() } as unknown as AuditService;
       const tasksService = { generateInitialAncSchedule: jest.fn() } as unknown as TasksService;
-      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: jest.fn() } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
       const result = await service.listForCaseload('jwt');
@@ -438,7 +438,7 @@ describe('EpisodeService', () => {
       const supabaseService = { getClientForUser: () => client } as unknown as SupabaseService;
       const auditService = { log: jest.fn() } as unknown as AuditService;
       const tasksService = { generateInitialAncSchedule: jest.fn() } as unknown as TasksService;
-      const eventEmitter = { emit: jest.fn() } as unknown as EventEmitter2;
+      const eventEmitter = { emitAsync: jest.fn() } as unknown as EventEmitter2;
 
       const service = await buildEpisodeService(supabaseService, auditService, tasksService, eventEmitter);
       await service.listForCaseload('jwt', 'f1');
@@ -492,7 +492,7 @@ describe('EpisodeService', () => {
     return {
       auditService: { log: jest.fn() } as unknown as AuditService,
       tasksService: { generateInitialAncSchedule: jest.fn() } as unknown as TasksService,
-      eventEmitter: { emit: jest.fn() } as unknown as EventEmitter2,
+      eventEmitter: { emitAsync: jest.fn() } as unknown as EventEmitter2,
     };
   }
 

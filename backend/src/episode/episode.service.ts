@@ -110,8 +110,15 @@ export class EpisodeService {
     // not a distributed-transaction problem to solve in this plan.
     await this.tasksService.generateInitialAncSchedule(jwt, actorUserId, tenantId, data.id);
 
+    // Awaited, not fire-and-forget: on a serverless platform the instance can be frozen the
+    // moment this HTTP response is sent, so an un-awaited emit risks the risk assessment
+    // never actually running -- silently, since the episode is already created and the API
+    // call already returned 201. RiskService's own handler still catches and logs its
+    // failures internally (see risk.service.ts), so awaiting here cannot turn a scoring
+    // failure into a failed episode creation -- it only guarantees scoring is attempted
+    // before the request is considered done.
     const payload: EpisodeLifecycleEventPayload = { episodeId: data.id, tenantId, actorUserId };
-    this.eventEmitter.emit('episode.created', payload);
+    await this.eventEmitter.emitAsync('episode.created', payload);
 
     return EpisodeResponseDto.fromRow(data);
   }
@@ -157,8 +164,9 @@ export class EpisodeService {
       metadata: { pregnancyEpisodeId: episodeId },
     });
 
+    // See the comment on the 'episode.created' emit in create() above -- same reasoning.
     const payload: EpisodeLifecycleEventPayload = { episodeId, tenantId, actorUserId };
-    this.eventEmitter.emit('episode.clinical_data_updated', payload);
+    await this.eventEmitter.emitAsync('episode.clinical_data_updated', payload);
 
     return EncounterNoteResponseDto.fromRow(data);
   }
