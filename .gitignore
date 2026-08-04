@@ -35,3 +35,5 @@ backend/dist/
 
 # Frontend (redundant with generic patterns above, kept explicit per plan)
 frontend/.next/
+.vercel
+.env*
